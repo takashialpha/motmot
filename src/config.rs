@@ -46,26 +46,24 @@ impl Logging {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        let config_dir = dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("motmot");
+        let config_dir = PathBuf::from("/etc/motmot");
+        let ssl_dir = config_dir.join("ssl");
 
-        let data_dir = dirs::data_local_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("motmot");
+        let data_dir = PathBuf::from("/var/lib/motmot");
+        let log_dir = PathBuf::from("/var/log/motmot");
 
         Self {
             server: Server {
                 host: "0.0.0.0".into(),
-                port: 8080,
+                port: 443,
                 root: Some(data_dir.clone()),
-                cert_path: config_dir.join("server.cert"),
-                key_path: config_dir.join("server.key"),
+                cert_path: ssl_dir.join("server.crt"),
+                key_path: ssl_dir.join("server.key"),
             },
             logging: Logging {
                 stdout_level: Logging::default_stdout_level(),
                 file_level: Logging::default_file_level(),
-                file_path: Some(data_dir.join("app.log")),
+                file_path: Some(log_dir.join("motmot.log")),
             },
         }
     }
