@@ -2,6 +2,7 @@ use app_base::app::{AppConfigLocation, run};
 
 mod app;
 mod config;
+mod server;
 
 fn main() {
     let cfg = AppConfigLocation::new("motmot", "motmot-config.toml");
