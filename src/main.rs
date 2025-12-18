@@ -2,6 +2,7 @@ use app_base::app::{AppConfigLocation, run};
 
 mod app;
 mod config;
+mod logging;
 mod server;
 
 fn main() {
