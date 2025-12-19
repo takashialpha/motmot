@@ -1,6 +1,8 @@
-- logging should start before anything else.
-so it can detail the whole app life and not only after the server init.
-- separate server into diferent modules
-- errors in tls and serving loop should get a detailed message
+- logical improvements; review logic.
+- add a kind of setup that ensures the health in startup (it must run after logs, before run_server)
+**it must ensure that all directories and keys exist, if not, create them. (this feature must be a setting in the config file)
+- support for all tls 1.3/https keys and not only 1. 
+- a better signal handling
+- server management while running, also run as a service,
 ....
-- add webtransport and all the remaining features for the first release.
+- add webtransport and all the remaining features (caching... a lot more things) for the first release.

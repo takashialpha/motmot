@@ -79,10 +79,11 @@ checksum = "a23eb6b1614318a8071c9b2521f36b424b2c83db5eb3a0fead4a6c0809af6e61"
 [[package]]
 name = "app-base"
 version = "0.1.0"
-source = "git+https://github.com/takashialpha/app-base.git#74e93cedab6c6af496a32655e0860c243c13edc1"
+source = "git+https://github.com/takashialpha/app-base.git#e6fd4dbac6daace665404ddd3b686aa39238791e"
 dependencies = [
  "clap 4.5.53",
  "dirs",
+ "libc",
  "serde",
  "toml",
 ]

@@ -5,16 +5,20 @@ use crate::{
 };
 use app_base::{
     App,
-    app::Context,
+    app::{Context, Privilege},
     error::{AppError, ConfigError},
 };
 use tokio::runtime::Runtime;
+use tokio::task;
 
 pub struct MotMot;
 
 impl App for MotMot {
     type Config = AppConfig;
 
+    fn privilege() -> Privilege {
+        Privilege::Root
+    }
     fn run(&self, ctx: Context<Self::Config>) -> Result<(), AppError> {
         rustls::crypto::aws_lc_rs::default_provider()
             .install_default()
@@ -29,7 +33,10 @@ impl App for MotMot {
                 e,
             )))
         })?;
-        rt.block_on(async move {
+
+        let local = task::LocalSet::new();
+
+        rt.block_on(local.run_until(async move {
             logging::init_logging_async(&ctx.config.logging)
                 .await
                 .map_err(|e| {
@@ -45,6 +52,6 @@ impl App for MotMot {
                     format!("{e}"),
                 )))
             })
-        })
+        }))
     }
 }

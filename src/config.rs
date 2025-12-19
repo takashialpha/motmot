@@ -57,7 +57,7 @@ impl Default for AppConfig {
                 host: "0.0.0.0".into(),
                 port: 443,
                 root: Some(data_dir.clone()),
-                cert_path: ssl_dir.join("server.crt"),
+                cert_path: ssl_dir.join("server.cert"),
                 key_path: ssl_dir.join("server.key"),
             },
             logging: Logging {
