@@ -1,13 +1,11 @@
-use crate::{
-    config::AppConfig,
-    logging,
-    server::{ServerConfig, run_server},
-};
+use crate::{config::AppConfig, logging, server::run_server};
 use app_base::{
     App,
     app::{Context, Privilege},
     error::{AppError, ConfigError},
 };
+
+use std::sync::Arc;
 use tokio::runtime::Runtime;
 use tokio::task;
 
@@ -24,8 +22,10 @@ impl App for MotMot {
             .install_default()
             .expect("failed to install aws-lc-rs crypto provider");
 
-        let server_cfg = ServerConfig::from_app_config(&ctx.config.server)
-            .map_err(|e| AppError::from(ConfigError::Io(e)))?;
+        // let server_cfg = ServerConfig::from_app_config(&ctx.config.server)
+        //     .map_err(|e| AppError::from(ConfigError::Io(e)))?;
+
+        let server_cfg = Arc::new(ctx.config.clone());
 
         let rt = Runtime::new().map_err(|e| {
             AppError::from(ConfigError::Io(std::io::Error::new(

@@ -1,12 +1,13 @@
-pub mod config;
 pub mod fs;
 pub mod h3;
 pub mod quic;
 pub mod request;
 pub mod tls;
 
-pub use config::ServerConfig;
+use std::sync::Arc;
 
-pub async fn run_server(cfg: ServerConfig) -> Result<(), Box<dyn std::error::Error>> {
+pub use crate::config::AppConfig;
+
+pub async fn run_server(cfg: Arc<AppConfig>) -> Result<(), Box<dyn std::error::Error>> {
     quic::run(cfg).await
 }

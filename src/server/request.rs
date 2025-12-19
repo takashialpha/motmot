@@ -1,24 +1,21 @@
-use bytes::{Bytes, BytesMut};
-use std::path::PathBuf;
-use std::sync::Arc;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
 use h3::server::RequestResolver;
 
-use crate::server::fs;
+use crate::config::AppConfig;
 
 pub async fn handle_request<C>(
-    resolver: RequestResolver<C, Bytes>,
-    root: Option<Arc<PathBuf>>,
+    resolver: RequestResolver<C, bytes::Bytes>,
+    config: &AppConfig,
 ) -> Result<(), Box<dyn std::error::Error>>
 where
-    C: h3::quic::Connection<Bytes>,
+    C: h3::quic::Connection<bytes::Bytes>,
 {
-    let (req, mut stream): (http::Request<()>, _) = resolver.resolve_request().await?;
-    debug!("Received request: {} {}", req.method(), req.uri().path());
+    let (req, mut stream) = resolver.resolve_request().await?;
+    tracing::debug!("Received request: {} {}", req.method(), req.uri().path());
 
-    let (status, file) = match fs::determine_file(&req, root.as_deref()).await {
+    let (status, file) = match crate::server::fs::resolve_file(req.uri().path(), config).await {
         Ok(opt) => opt,
         Err(status) => (status, None),
     };
@@ -28,7 +25,7 @@ where
 
     if let Some(mut file) = file {
         loop {
-            let mut buf = BytesMut::with_capacity(4096 * 10);
+            let mut buf = bytes::BytesMut::with_capacity(4096 * 10);
             let n = file.read_buf(&mut buf).await?;
             if n == 0 {
                 break;

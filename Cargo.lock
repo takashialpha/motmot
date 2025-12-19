@@ -807,6 +807,7 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "serde",
+ "socket2",
  "structopt",
  "tokio",
  "tracing",
