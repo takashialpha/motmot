@@ -1,0 +1,6 @@
+- logging should start before anything else.
+so it can detail the whole app life and not only after the server init.
+- separate server into diferent modules
+- errors in tls and serving loop should get a detailed message
+....
+- add webtransport and all the remaining features for the first release.
