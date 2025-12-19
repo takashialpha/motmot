@@ -1,8 +1,9 @@
 - add a kind of setup that ensures the health in startup (it must run after logs, before run_server)
 **it must ensure that all keys exist, if not, create them. (this feature must be a setting in the config file)
 - make log more detailed.
-- multiple servers running (no theorical limit if possible besides integer limit)
+- multiple servers running (its already possible, but hard and not natively supported. no theorical limit if possible besides integer limit)
 - better signal handling
 - server management while running, also run as a service,
+- make docs
 ....
 - add webtransport and all the remaining features (caching... a lot more things) for the first release.
