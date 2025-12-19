@@ -48,10 +48,8 @@ impl Error for TlsConfigError {
         match self {
             TlsConfigError::CertRead { source, .. } => Some(source),
             TlsConfigError::KeyRead { source, .. } => Some(source),
-            // InvalidKey stores a String, not an Error
             TlsConfigError::InvalidKey { .. } => None,
             TlsConfigError::InvalidCertChain(e) => Some(e),
-            // The associated QuinnConfig error type should implement Error
             TlsConfigError::QuinnConfig(e) => Some(e),
         }
     }

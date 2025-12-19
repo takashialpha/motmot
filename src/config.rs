@@ -13,9 +13,6 @@ pub struct Server {
     pub host: String,
     pub port: u16,
 
-    #[serde(default)]
-    pub root: Option<PathBuf>,
-
     pub cert_path: PathBuf,
     pub key_path: PathBuf,
 
@@ -77,9 +74,8 @@ impl Default for AppConfig {
 
         Self {
             server: Server {
-                host: "0.0.0.0".into(),
+                host: "::".into(),
                 port: 443,
-                root: Some(data_dir.clone()),
                 cert_path: ssl_dir.join("server.cert"),
                 key_path: ssl_dir.join("server.key"),
                 routes,
