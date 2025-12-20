@@ -1,3 +1,4 @@
+use crate::server::error::ServerError;
 use tokio::io::AsyncReadExt;
 use tracing::debug;
 
@@ -8,17 +9,25 @@ use crate::config::AppConfig;
 pub async fn handle_request<C>(
     resolver: RequestResolver<C, bytes::Bytes>,
     config: &AppConfig,
-) -> Result<(), Box<dyn std::error::Error>>
+    server_name: &str,
+) -> Result<(), ServerError>
 where
     C: h3::quic::Connection<bytes::Bytes>,
 {
     let (req, mut stream) = resolver.resolve_request().await?;
-    tracing::debug!("Received request: {} {}", req.method(), req.uri().path());
 
-    let (status, file) = match crate::server::fs::resolve_file(req.uri().path(), config).await {
-        Ok(opt) => opt,
-        Err(status) => (status, None),
-    };
+    debug!(
+        server = %server_name,
+        "Received request: {} {}",
+        req.method(),
+        req.uri().path()
+    );
+
+    let (status, file) =
+        match crate::server::fs::resolve_file(req.uri().path(), config, server_name).await {
+            Ok(opt) => opt,
+            Err(status) => (status, None),
+        };
 
     let resp = http::Response::builder().status(status).body(())?;
     stream.send_response(resp).await?;
@@ -35,6 +44,13 @@ where
     }
 
     stream.finish().await?;
-    debug!("Finished request: {} {}", req.method(), req.uri().path());
+
+    debug!(
+        server = %server_name,
+        "Finished request: {} {}",
+        req.method(),
+        req.uri().path()
+    );
+
     Ok(())
 }

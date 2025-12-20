@@ -4,12 +4,13 @@ use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AppConfig {
-    pub server: Server,
+    pub servers: HashMap<String, Server>,
     pub logging: Logging,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Server {
+    /// IPv6-only host, e.g. "::"
     pub host: String,
     pub port: u16,
 
@@ -21,34 +22,27 @@ pub struct Server {
     pub routes: HashMap<String, RouteConfig>,
 }
 
-/// Route configuration for a single path
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RouteConfig {
-    /// relative to server root
+    /// Absolute directory to serve from
     pub directory: PathBuf,
-    /// file to serve in this directory
+
+    /// File served for this route
     pub file: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Logging {
-    #[serde(default = "Logging::default_stdout_level")]
-    pub stdout_level: String,
-
-    #[serde(default = "Logging::default_file_level")]
-    pub file_level: String,
+    #[serde(default = "Logging::default_level")]
+    pub level: String,
 
     #[serde(default)]
     pub file_path: Option<PathBuf>,
 }
 
 impl Logging {
-    fn default_stdout_level() -> String {
+    fn default_level() -> String {
         "info".to_string()
-    }
-
-    fn default_file_level() -> String {
-        "debug".to_string()
     }
 }
 
@@ -60,29 +54,31 @@ impl Default for AppConfig {
         let data_dir = PathBuf::from("/var/lib/motmot");
         let log_dir = PathBuf::from("/var/log/motmot");
 
-        // Default routes map
-        let mut routes = std::collections::HashMap::new();
-
-        // "/" -> root directory, default file index.html
+        let mut routes = HashMap::new();
         routes.insert(
             "/".to_string(),
             RouteConfig {
-                directory: data_dir.clone(), // root dir
+                directory: data_dir.clone(),
                 file: "index.html".to_string(),
             },
         );
 
-        Self {
-            server: Server {
-                host: "::".into(),
+        let mut servers = HashMap::new();
+        servers.insert(
+            "main".to_string(),
+            Server {
+                host: "::".to_string(),
                 port: 443,
                 cert_path: ssl_dir.join("server.cert"),
                 key_path: ssl_dir.join("server.key"),
                 routes,
             },
+        );
+
+        Self {
+            servers,
             logging: Logging {
-                stdout_level: Logging::default_stdout_level(),
-                file_level: Logging::default_file_level(),
+                level: Logging::default_level(),
                 file_path: Some(log_dir.join("motmot.log")),
             },
         }

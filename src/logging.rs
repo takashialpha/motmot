@@ -40,7 +40,7 @@ pub async fn init_logging_async(cfg: &Logging) -> anyhow::Result<()> {
     let subscriber = tracing_subscriber::fmt()
         .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
         .with_writer(MultiWriter)
-        .with_env_filter(&cfg.stdout_level)
+        .with_env_filter(&cfg.level)
         .finish();
 
     tracing::subscriber::set_global_default(subscriber)?;
