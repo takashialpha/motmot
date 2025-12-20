@@ -1,8 +1,10 @@
-- add a kind of setup that ensures the health in startup (it must run after logs, before run_server)
-**it must ensure that all keys exist, if not, create them. (this feature must be a setting in the config file)
-- make log more detailed.
+- add a kind of setup that ensures the health in startup (it must run after logs, before run_server): it must ensure that all keys exist, if not, create them. (this feature must be a setting in the config file)
+- make log more detailed (and better formatted for debug, informative for info, and remove duplicated server trace).
 - better signal handling
 - server management while running, also run as a service,
 - make docs
+
+fix or document: path "/example/" does not work on config file, only "/example"
+requesting "site.com/////////" does not translate to "site.com" but somewhy "site.com/example///////" does translate to "site.com/example"
 ....
 - add webtransport and all the remaining features (caching... a lot more things) for the first release.
