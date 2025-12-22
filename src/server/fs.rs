@@ -18,12 +18,11 @@ pub async fn resolve_file(
         req_path.trim_end_matches('/').to_string()
     };
 
-    if normalized != "/" {
-        if let Some(segment) = normalized.rsplit('/').next() {
-            if segment.contains('.') {
-                return Err(StatusCode::NOT_FOUND);
-            }
-        }
+    if normalized != "/"
+        && let Some(segment) = normalized.rsplit('/').next()
+        && segment.contains('.')
+    {
+        return Err(StatusCode::NOT_FOUND);
     }
 
     let route: &RouteConfig = match server.routes.get(&normalized) {

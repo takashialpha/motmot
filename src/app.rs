@@ -27,12 +27,8 @@ impl App for MotMot {
 
         let server_cfg = Arc::new(ctx.config.clone());
 
-        let rt = Runtime::new().map_err(|e| {
-            AppError::from(ConfigError::Io(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e,
-            )))
-        })?;
+        let rt = Runtime::new()
+            .map_err(|e| AppError::from(ConfigError::Io(std::io::Error::other(e))))?;
 
         let local = task::LocalSet::new();
 
@@ -40,18 +36,14 @@ impl App for MotMot {
             logging::init_logging_async(&ctx.config.logging)
                 .await
                 .map_err(|e| {
-                    AppError::from(ConfigError::Io(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Failed to initialize logging: {e}"),
-                    )))
+                    AppError::from(ConfigError::Io(std::io::Error::other(format!(
+                        "Failed to initialize logging: {e}"
+                    ))))
                 })?;
 
-            run_server(server_cfg).await.map_err(|e| {
-                AppError::from(ConfigError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("{e}"),
-                )))
-            })
+            run_server(server_cfg)
+                .await
+                .map_err(|e| AppError::from(ConfigError::Io(std::io::Error::other(format!("{e}")))))
         }))
     }
 }

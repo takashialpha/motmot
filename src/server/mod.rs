@@ -14,7 +14,7 @@ use tracing::Instrument;
 pub async fn run_server(cfg: Arc<AppConfig>) -> Result<(), ServerError> {
     let mut handles = Vec::new();
 
-    for (name, _) in &cfg.servers {
+    for name in cfg.servers.keys() {
         let cfg_clone = cfg.clone();
 
         let server_name = name.clone(); // for bookkeeping
