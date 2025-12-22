@@ -33,16 +33,16 @@ pub struct RouteConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Logging {
-    #[serde(default = "Logging::default_level")]
-    pub level: String,
+    #[serde(default = "Logging::default_filter")]
+    pub filter: String,
 
     #[serde(default)]
     pub file_path: Option<PathBuf>,
 }
 
 impl Logging {
-    fn default_level() -> String {
-        "info".to_string()
+    fn default_filter() -> String {
+        "info,motmot=info,quinn=info,h3=info,h3_quinn=info".to_string()
     }
 }
 
@@ -78,7 +78,7 @@ impl Default for AppConfig {
         Self {
             servers,
             logging: Logging {
-                level: Logging::default_level(),
+                filter: Logging::default_filter(),
                 file_path: Some(log_dir.join("motmot.log")),
             },
         }

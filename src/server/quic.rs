@@ -27,8 +27,6 @@ pub async fn run(cfg: Arc<AppConfig>, server_name: String) -> Result<(), ServerE
             })?
         };
 
-    info!(server = %server_name, "Starting IPv6 server on {}", listen_addr);
-
     // Load TLS config (HTTP/3 + TLS 1.3 only)
     let tls_config = tls::load_tls_config(&server_name, &server.cert_path, &server.key_path)?;
     let server_config = quinn::ServerConfig::with_crypto(Arc::new(tls_config));
@@ -47,7 +45,11 @@ pub async fn run(cfg: Arc<AppConfig>, server_name: String) -> Result<(), ServerE
         Arc::new(quinn::TokioRuntime),
     )?;
 
-    info!(server = %server_name, "Server listening on {}", listen_addr);
+    info!(
+        server = %server_name,
+        addr = %listen_addr,
+        "listener_start"
+    );
 
     // Share server name cheaply across tasks
     let server_name = Arc::new(server_name);
@@ -63,11 +65,21 @@ pub async fn run(cfg: Arc<AppConfig>, server_name: String) -> Result<(), ServerE
                     if let Err(e) =
                         h3::handle_connection(conn, cfg_clone, server_name.as_ref().clone()).await
                     {
-                        error!(server = %server_name, error = %e, "Connection error");
+                        error!(
+                            server = %server_name,
+                            stage = "accept",
+                            error = %e,
+                            "conn_error"
+                        );
                     }
                 }
                 Err(e) => {
-                    error!(server = %server_name, error = %e, "Failed to accept incoming connection");
+                    error!(
+                        server = %server_name,
+                        stage = "h3_init",
+                        error = %e,
+                        "conn_error"
+                    );
                 }
             }
         });

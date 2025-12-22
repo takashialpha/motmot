@@ -1,6 +1,7 @@
 use crate::server::error::ServerError;
+use std::time::Instant;
 use tokio::io::AsyncReadExt;
-use tracing::debug;
+use tracing::info;
 
 use h3::server::RequestResolver;
 
@@ -14,20 +15,17 @@ pub async fn handle_request<C>(
 where
     C: h3::quic::Connection<bytes::Bytes>,
 {
+    let start = Instant::now();
+
     let (req, mut stream) = resolver.resolve_request().await?;
 
-    debug!(
-        server = %server_name,
-        "Received request: {} {}",
-        req.method(),
-        req.uri().path()
-    );
+    let path = req.uri().path();
+    let method = req.method().clone();
 
-    let (status, file) =
-        match crate::server::fs::resolve_file(req.uri().path(), config, server_name).await {
-            Ok(opt) => opt,
-            Err(status) => (status, None),
-        };
+    let (status, file) = match crate::server::fs::resolve_file(path, config, server_name).await {
+        Ok(opt) => opt,
+        Err(status) => (status, None),
+    };
 
     let resp = http::Response::builder().status(status).body(())?;
     stream.send_response(resp).await?;
@@ -45,11 +43,13 @@ where
 
     stream.finish().await?;
 
-    debug!(
+    info!(
         server = %server_name,
-        "Finished request: {} {}",
-        req.method(),
-        req.uri().path()
+        method = %method,
+        path = %path,
+        status = status.as_u16(),
+        dur_ms = start.elapsed().as_millis(),
+        "request"
     );
 
     Ok(())

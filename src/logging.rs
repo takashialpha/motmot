@@ -1,78 +1,124 @@
 use crate::config::Logging;
-use once_cell::sync::Lazy;
-use std::io::{self, Write};
-use std::sync::Mutex;
-use tokio::sync::mpsc;
-use tracing_subscriber::fmt::MakeWriter;
-
-static FILE_CHANNEL: Lazy<Mutex<Option<mpsc::UnboundedSender<String>>>> =
-    Lazy::new(|| Mutex::new(None));
+use std::fmt::Write as _;
+use std::io;
+use tracing::{Event, Level, Subscriber};
+use tracing_subscriber::{
+    EnvFilter,
+    fmt::{
+        self,
+        format::{FormatEvent, FormatFields, Writer},
+        time::{FormatTime, LocalTime},
+    },
+    layer::SubscriberExt,
+    registry::LookupSpan,
+};
 
 pub async fn init_logging_async(cfg: &Logging) -> anyhow::Result<()> {
-    if let Some(path) = &cfg.file_path {
-        if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
-        }
+    // filter
+    let filter = EnvFilter::try_new(&cfg.filter)
+        .map_err(|e| anyhow::anyhow!("invalid log filter '{}': {}", cfg.filter, e))?;
 
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-        *FILE_CHANNEL.lock().unwrap() = Some(tx);
+    // colored
+    let stdout_layer = fmt::layer()
+        .with_timer(LocalTime::rfc_3339())
+        .with_ansi(true)
+        .event_format(FlatFormatter)
+        .with_writer(io::stdout);
 
-        let path = path.clone();
-        tokio::spawn(async move {
-            use tokio::fs::OpenOptions;
-            use tokio::io::AsyncWriteExt;
+    // plain
+    let file_layer = cfg.file_path.clone().map(|path| {
+        fmt::layer()
+            .with_timer(LocalTime::rfc_3339())
+            .with_ansi(false)
+            .event_format(FlatFormatter)
+            .with_writer(move || {
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&path)
+                    .expect("log file open failed")
+            })
+    });
 
-            let mut file = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-                .await
-                .expect("Failed to open log file");
-
-            while let Some(line) = rx.recv().await {
-                let _ = file.write_all(line.as_bytes()).await;
-                let _ = file.write_all(b"\n").await;
-                let _ = file.flush().await;
-            }
-        });
-    }
-
-    let subscriber = tracing_subscriber::fmt()
-        .with_timer(tracing_subscriber::fmt::time::LocalTime::rfc_3339())
-        .with_writer(MultiWriter)
-        .with_env_filter(&cfg.level)
-        .finish();
+    let subscriber = tracing_subscriber::registry()
+        .with(filter)
+        .with(stdout_layer)
+        .with(file_layer);
 
     tracing::subscriber::set_global_default(subscriber)?;
     Ok(())
 }
 
-struct MultiWriter;
+/* ---------------- formatter ---------------- */
 
-impl<'a> MakeWriter<'a> for MultiWriter {
-    type Writer = MultiWriterHandle;
+struct FlatFormatter;
 
-    fn make_writer(&'a self) -> Self::Writer {
-        MultiWriterHandle
+impl<S, N> FormatEvent<S, N> for FlatFormatter
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &fmt::FmtContext<'_, S, N>,
+        mut out: Writer<'_>,
+        event: &Event<'_>,
+    ) -> std::fmt::Result {
+        // timestamp
+        LocalTime::rfc_3339().format_time(&mut out)?;
+        write!(out, " ")?;
+
+        // level
+        match *event.metadata().level() {
+            Level::ERROR => write!(out, "\x1b[31mERROR\x1b[0m ")?,
+            Level::WARN => write!(out, "\x1b[33mWARN \x1b[0m ")?,
+            Level::INFO => write!(out, "\x1b[32mINFO \x1b[0m ")?,
+            Level::DEBUG => write!(out, "\x1b[34mDEBUG\x1b[0m ")?,
+            Level::TRACE => write!(out, "\x1b[90mTRACE\x1b[0m ")?,
+        }
+
+        // span fields (server=main, conn_id, etc)
+        if let Some(scope) = ctx.event_scope() {
+            for span in scope.from_root() {
+                if let Some(fields) = span.extensions().get::<SpanFields>() {
+                    write!(out, "{} ", fields.0)?;
+                }
+            }
+        }
+
+        // event fields + message (event name)
+        ctx.field_format().format_fields(out.by_ref(), event)?;
+        writeln!(out)
     }
 }
 
-struct MultiWriterHandle;
+/* ---------------- span fields ---------------- */
 
-impl Write for MultiWriterHandle {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let s = std::str::from_utf8(buf).unwrap_or("<invalid utf8>");
+#[derive(Default)]
+struct SpanFields(String);
 
-        print!("{}", s);
+struct SpanVisitor<'a>(&'a mut String);
 
-        if let Some(tx) = &*FILE_CHANNEL.lock().unwrap() {
-            let _ = tx.send(s.to_string());
-        }
-
-        Ok(buf.len())
+impl<'a> tracing::field::Visit for SpanVisitor<'a> {
+    fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+        let _ = write!(self.0, "{}={} ", field.name(), value);
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        io::stdout().flush()
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        let _ = write!(self.0, "{}={:?} ", field.name(), value);
+    }
+}
+
+impl tracing_subscriber::Layer<tracing_subscriber::Registry> for FlatFormatter {
+    fn on_new_span(
+        &self,
+        attrs: &tracing::span::Attributes<'_>,
+        id: &tracing::span::Id,
+        ctx: tracing_subscriber::layer::Context<'_, tracing_subscriber::Registry>,
+    ) {
+        let span = ctx.span(id).expect("span exists");
+        let mut buf = String::new();
+        attrs.record(&mut SpanVisitor(&mut buf));
+        span.extensions_mut().insert(SpanFields(buf));
     }
 }

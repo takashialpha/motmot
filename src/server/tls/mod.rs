@@ -14,14 +14,14 @@ pub fn load_tls_config(
     cert_path: &PathBuf,
     key_path: &PathBuf,
 ) -> Result<QuicServerConfig, TlsConfigError> {
-    info!(server = %app_name, "Loading TLS configuration");
+    info!(server = %app_name, "tls_config_load_started");
 
     let cert_bytes = std::fs::read(cert_path).map_err(|e| {
         error!(
             server = %app_name,
             path = %cert_path.display(),
             error = %e,
-            "Failed to read TLS certificate"
+            "tls_cert_read_failed"
         );
         TlsConfigError::CertRead {
             path: cert_path.display().to_string(),
@@ -34,7 +34,7 @@ pub fn load_tls_config(
             server = %app_name,
             path = %key_path.display(),
             error = %e,
-            "Failed to read TLS private key"
+            "tls_key_read_failed"
         );
         TlsConfigError::KeyRead {
             path: key_path.display().to_string(),
@@ -48,7 +48,7 @@ pub fn load_tls_config(
         error!(
             server = %app_name,
             error = %e,
-            "Invalid TLS private key format"
+            "tls_key_invalid"
         );
         TlsConfigError::InvalidKey {
             message: e.to_string(),
@@ -62,7 +62,7 @@ pub fn load_tls_config(
             error!(
                 server = %app_name,
                 error = %e,
-                "Invalid TLS certificate / key pair"
+                "tls_cert_chain_invalid"
             );
             TlsConfigError::InvalidCertChain(e)
         })?;
@@ -74,7 +74,7 @@ pub fn load_tls_config(
         error!(
             server = %app_name,
             error = %e,
-            "Failed to construct QUIC TLS configuration"
+            "tls_quinn_config_failed"
         );
         TlsConfigError::QuinnConfig(e)
     })

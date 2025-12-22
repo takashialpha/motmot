@@ -9,7 +9,7 @@ pub use crate::config::AppConfig;
 use crate::server::error::ServerError;
 
 use std::sync::Arc;
-use tracing::{Instrument, info};
+use tracing::Instrument;
 
 pub async fn run_server(cfg: Arc<AppConfig>) -> Result<(), ServerError> {
     let mut handles = Vec::new();
@@ -21,7 +21,6 @@ pub async fn run_server(cfg: Arc<AppConfig>) -> Result<(), ServerError> {
         let task_name = server_name.clone(); // for the async task
 
         let span = tracing::info_span!("server", server = %server_name);
-        info!(server = %server_name, "Starting server");
 
         let handle =
             tokio::spawn(async move { quic::run(cfg_clone, task_name).await }.instrument(span));
@@ -32,7 +31,7 @@ pub async fn run_server(cfg: Arc<AppConfig>) -> Result<(), ServerError> {
     for (name, handle) in handles {
         match handle.await {
             Ok(Ok(())) => {
-                tracing::warn!(server = %name, "Server exited normally");
+                tracing::info!(server = %name, "Server exited");
             }
             Ok(Err(e)) => {
                 tracing::error!(server = %name, error = %e, "Server exited with error");
