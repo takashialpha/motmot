@@ -10,7 +10,6 @@ mod server;
 const APP_NAME: &str = "motmot";
 const TOML_CONFIG_DIR: &str = "/etc/motmot";
 
-/// MotMot Application
 #[derive(Debug, Parser)]
 #[command(
     name = APP_NAME,
@@ -24,6 +23,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    #[command(about = "Init motmot according to the config file")]
     Init {
         #[command(flatten)]
         init: InitArgs,
@@ -33,7 +33,6 @@ enum Command {
 fn main() {
     let cli = Cli::parse();
 
-    // Construct CliArgs from parsed CLI
     let cli_args = match cli.command {
         Command::Init { init } => CliArgs::new(init, RuntimeArgs::default()),
     };

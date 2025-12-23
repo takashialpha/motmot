@@ -1,7 +1,5 @@
 use crate::server::error::ServerError;
-use std::time::Instant;
 use tokio::io::AsyncReadExt;
-use tracing::info;
 
 use h3::server::RequestResolver;
 
@@ -15,16 +13,25 @@ pub async fn handle_request<C>(
 where
     C: h3::quic::Connection<bytes::Bytes>,
 {
-    let start = Instant::now();
-
+    let start = std::time::Instant::now();
     let (req, mut stream) = resolver.resolve_request().await?;
-
-    let path = req.uri().path();
     let method = req.method().clone();
+    let path = req.uri().path();
 
-    let (status, file) = match crate::server::fs::resolve_file(path, config, server_name).await {
-        Ok(opt) => opt,
-        Err(status) => (status, None),
+    // Handle all methods
+    let (status, file) = match method {
+        http::Method::GET | http::Method::HEAD => {
+            match crate::server::fs::resolve_file(path, config, server_name).await {
+                Ok(res) => res,
+                Err(status) => (status, None),
+            }
+        }
+        http::Method::POST
+        | http::Method::PUT
+        | http::Method::PATCH
+        | http::Method::DELETE
+        | http::Method::OPTIONS => (http::StatusCode::OK, None),
+        _ => (http::StatusCode::METHOD_NOT_ALLOWED, None),
     };
 
     let resp = http::Response::builder().status(status).body(())?;
@@ -43,13 +50,13 @@ where
 
     stream.finish().await?;
 
-    info!(
+    tracing::info!(
         server = %server_name,
         method = %method,
         path = %path,
         status = status.as_u16(),
         dur_ms = start.elapsed().as_millis(),
-        "request"
+        "request_handled"
     );
 
     Ok(())

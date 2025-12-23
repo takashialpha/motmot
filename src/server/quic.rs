@@ -3,9 +3,14 @@ use quinn::{Endpoint, EndpointConfig};
 use socket2::{Domain, Protocol, Socket, Type};
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tracing::{error, info};
+use tokio::sync::Notify;
+use tracing::info;
 
-pub async fn run(cfg: Arc<AppConfig>, server_name: String) -> Result<(), ServerError> {
+pub async fn run(
+    cfg: Arc<AppConfig>,
+    server_name: String,
+    shutdown: Arc<Notify>,
+) -> Result<(), ServerError> {
     let server = cfg.servers.get(&server_name).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -13,7 +18,6 @@ pub async fn run(cfg: Arc<AppConfig>, server_name: String) -> Result<(), ServerE
         )
     })?;
 
-    // Resolve host to IPv6 address
     let listen_addr: SocketAddr =
         if server.host.contains(':') && server.host.parse::<std::net::Ipv6Addr>().is_ok() {
             format!("[{}]:{}", server.host, server.port).parse()?
@@ -27,11 +31,9 @@ pub async fn run(cfg: Arc<AppConfig>, server_name: String) -> Result<(), ServerE
             })?
         };
 
-    // Load TLS config (HTTP/3 + TLS 1.3 only)
     let tls_config = tls::load_tls_config(&server_name, &server.cert_path, &server.key_path)?;
     let server_config = quinn::ServerConfig::with_crypto(Arc::new(tls_config));
 
-    // Create IPv6-only UDP socket
     let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
     socket.set_only_v6(true)?;
     socket.bind(&listen_addr.into())?;
@@ -54,35 +56,30 @@ pub async fn run(cfg: Arc<AppConfig>, server_name: String) -> Result<(), ServerE
     // Share server name cheaply across tasks
     let server_name = Arc::new(server_name);
 
-    // Accept QUIC connections
-    while let Some(incoming) = endpoint.accept().await {
-        let cfg_clone = cfg.clone();
-        let server_name = Arc::clone(&server_name);
+    loop {
+        tokio::select! {
+            incoming = endpoint.accept() => {
+                if let Some(incoming) = incoming {
+                    let cfg_clone = cfg.clone();
+                    let server_name = server_name.clone();
 
-        tokio::spawn(async move {
-            match incoming.await {
-                Ok(conn) => {
-                    if let Err(e) =
-                        h3::handle_connection(conn, cfg_clone, server_name.as_ref().clone()).await
-                    {
-                        error!(
-                            server = %server_name,
-                            stage = "accept",
-                            error = %e,
-                            "conn_error"
-                        );
-                    }
-                }
-                Err(e) => {
-                    error!(
-                        server = %server_name,
-                        stage = "h3_init",
-                        error = %e,
-                        "conn_error"
-                    );
+                    tokio::spawn(async move {
+                        match incoming.await {
+                            Ok(conn) => {
+                                if let Err(e) = h3::handle_connection(conn, cfg_clone, server_name.to_string()).await {
+                                    tracing::error!(server=%server_name, error=%e, "conn_error");
+                                }
+                            }
+                            Err(e) => tracing::error!(server=%server_name, error=%e, "conn_accept_failed"),
+                        }
+                    });
                 }
             }
-        });
+            _ = shutdown.notified() => {
+                tracing::info!(server=%server_name, "Shutdown signal received, stopping accept loop");
+                break;
+            }
+        }
     }
 
     endpoint.wait_idle().await;
