@@ -114,7 +114,7 @@ async fn handle_connection(
                 let path = req.uri().path().to_string();
                 let ext = req.extensions();
 
-                if method == &Method::CONNECT
+                if method == Method::CONNECT
                     && ext.get::<Protocol>() == Some(&Protocol::WEB_TRANSPORT)
                 {
                     info!(

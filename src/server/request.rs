@@ -23,7 +23,7 @@ where
     let start = std::time::Instant::now();
     let method = req.method().clone();
     let path = req.uri().path().to_string();
-    let headers = req.headers().clone();
+    let _headers = req.headers().clone();
 
     // Read request body if present
     let mut body_bytes = bytes::BytesMut::new();
@@ -33,7 +33,7 @@ where
         chunk.advance(remaining);
     }
 
-    let body = if body_bytes.is_empty() {
+    let _body = if body_bytes.is_empty() {
         None
     } else {
         Some(body_bytes.freeze())

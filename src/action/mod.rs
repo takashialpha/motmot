@@ -15,7 +15,7 @@ pub use error::ActionError;
 pub async fn execute(
     action: &Action,
     request_path: &str,
-    config: Arc<AppConfig>,
+    _config: Arc<AppConfig>,
     server_name: &str,
 ) -> Result<(Response<()>, Option<Bytes>), ActionError> {
     match action {

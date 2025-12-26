@@ -1,8 +1,8 @@
 use std::time::Duration;
 
 use bytes::Bytes;
-use http::{HeaderMap, Method, Request, Response, StatusCode, Uri};
-use tracing::{error, info, warn};
+use http::{HeaderMap, Method, Response, Uri};
+use tracing::info;
 
 pub mod error;
 

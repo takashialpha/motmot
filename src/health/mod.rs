@@ -1,9 +1,11 @@
-use std::collections::HashMap;
-use std::path::Path;
+use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
 
 use thiserror::Error;
 use tokio::net::TcpListener;
 use tracing::{info, warn};
+
+use rustls::ServerConfig;
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 
 use crate::config::{Action, AppConfig};
 
@@ -12,20 +14,17 @@ pub enum HealthError {
     #[error("certificate file not found: {path}")]
     CertificateNotFound { path: String },
 
-    #[error("certificate file not readable: {path}, reason: {source}")]
-    CertificateNotReadable {
-        path: String,
-        source: std::io::Error,
-    },
+    #[error("certificate invalid: {path}, reason: {reason}")]
+    CertificateInvalid { path: String, reason: String },
 
     #[error("private key file not found: {path}")]
     PrivateKeyNotFound { path: String },
 
-    #[error("private key file not readable: {path}, reason: {source}")]
-    PrivateKeyNotReadable {
-        path: String,
-        source: std::io::Error,
-    },
+    #[error("private key invalid: {path}, reason: {reason}")]
+    PrivateKeyInvalid { path: String, reason: String },
+
+    #[error("TLS configuration invalid for server '{server}': {reason}")]
+    TlsConfigInvalid { server: String, reason: String },
 
     #[error("directory not found: {path}")]
     DirectoryNotFound { path: String },
@@ -54,12 +53,12 @@ pub enum HealthError {
     InsufficientPermissions { path: String },
 }
 
-/// Run all enabled health checks
+/// Entry point
 pub async fn run_checks(config: &AppConfig) -> Result<(), HealthError> {
     let health = &config.health;
 
     if health.check_certs {
-        check_certificates(config).await?;
+        check_certificates_quic(config)?;
     }
 
     if health.check_directories {
@@ -74,88 +73,120 @@ pub async fn run_checks(config: &AppConfig) -> Result<(), HealthError> {
     Ok(())
 }
 
-/// Check that all certificate paths exist or can be generated
-async fn check_certificates(config: &AppConfig) -> Result<(), HealthError> {
+//
+// ─── TLS / CERT VALIDATION ─────────────────────────────────────────────────────
+//
+
+fn check_certificates_quic(config: &AppConfig) -> Result<(), HealthError> {
     for (name, server) in &config.servers {
-        match (&server.cert_path, &server.key_path) {
-            // Both provided - verify they exist and are readable
-            (Some(cert_path), Some(key_path)) => {
-                check_file_readable(cert_path, |path, source| {
-                    if source.kind() == std::io::ErrorKind::NotFound {
-                        HealthError::CertificateNotFound {
-                            path: path.to_string(),
-                        }
-                    } else {
-                        HealthError::CertificateNotReadable {
-                            path: path.to_string(),
-                            source,
-                        }
-                    }
-                })
-                .await?;
-
-                check_file_readable(key_path, |path, source| {
-                    if source.kind() == std::io::ErrorKind::NotFound {
-                        HealthError::PrivateKeyNotFound {
-                            path: path.to_string(),
-                        }
-                    } else {
-                        HealthError::PrivateKeyNotReadable {
-                            path: path.to_string(),
-                            source,
-                        }
-                    }
-                })
-                .await?;
-
-                info!(
-                    server = %name,
-                    cert = %cert_path.display(),
-                    key = %key_path.display(),
-                    "health_check_certs_exist"
-                );
-            }
-
-            // One or both missing - verify we can write to generated directory
+        let (cert_path, key_path) = match (&server.cert_path, &server.key_path) {
+            (Some(c), Some(k)) => (c, k),
             _ => {
-                let gen_dir = std::path::PathBuf::from("/etc/motmot/ssl/generated");
-
-                // Check if directory exists or can be created
-                if !gen_dir.exists() {
-                    // Try to create it (will fail if no permissions)
-                    tokio::fs::create_dir_all(&gen_dir).await.map_err(|e| {
-                        HealthError::InsufficientPermissions {
-                            path: gen_dir.display().to_string(),
-                        }
-                    })?;
-                }
-
-                // Verify write access by creating a test file
-                let test_file = gen_dir.join(".write_test");
-                tokio::fs::write(&test_file, b"test").await.map_err(|_| {
-                    HealthError::InsufficientPermissions {
-                        path: gen_dir.display().to_string(),
-                    }
-                })?;
-                let _ = tokio::fs::remove_file(&test_file).await;
-
                 warn!(
                     server = %name,
-                    gen_dir = %gen_dir.display(),
-                    "health_check_certs_will_generate"
+                    "cert/key missing; will rely on generation"
                 );
+                continue;
             }
-        }
+        };
+
+        let certs = load_certs(cert_path)?;
+        let key = load_key(key_path)?;
+
+        let mut tls = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(certs, PrivateKeyDer::Pkcs8(key))
+            .map_err(|e| HealthError::TlsConfigInvalid {
+                server: name.clone(),
+                reason: e.to_string(),
+            })?;
+
+        // REQUIRED for QUIC / HTTP3
+        tls.alpn_protocols.push(b"h3".to_vec());
+
+        info!(
+            server = %name,
+            cert = %cert_path.display(),
+            key = %key_path.display(),
+            "health_check_tls_quic_valid"
+        );
     }
 
     Ok(())
 }
 
-/// Check that all static file directories exist and are accessible
+fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, HealthError> {
+    let file = File::open(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            HealthError::CertificateNotFound {
+                path: path.display().to_string(),
+            }
+        } else {
+            HealthError::CertificateInvalid {
+                path: path.display().to_string(),
+                reason: e.to_string(),
+            }
+        }
+    })?;
+
+    let mut reader = BufReader::new(file);
+    let mut certs = Vec::new();
+
+    for item in rustls_pemfile::certs(&mut reader) {
+        let cert = item.map_err(|e| HealthError::CertificateInvalid {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
+        certs.push(cert);
+    }
+
+    if certs.is_empty() {
+        return Err(HealthError::CertificateInvalid {
+            path: path.display().to_string(),
+            reason: "no certificates found".into(),
+        });
+    }
+
+    Ok(certs)
+}
+
+fn load_key(path: &Path) -> Result<PrivatePkcs8KeyDer<'static>, HealthError> {
+    let file = File::open(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            HealthError::PrivateKeyNotFound {
+                path: path.display().to_string(),
+            }
+        } else {
+            HealthError::PrivateKeyInvalid {
+                path: path.display().to_string(),
+                reason: e.to_string(),
+            }
+        }
+    })?;
+
+    let mut reader = BufReader::new(file);
+
+    for item in rustls_pemfile::pkcs8_private_keys(&mut reader) {
+        let key = item.map_err(|e| HealthError::PrivateKeyInvalid {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
+        return Ok(key);
+    }
+
+    Err(HealthError::PrivateKeyInvalid {
+        path: path.display().to_string(),
+        reason: "no PKCS8 private key found".into(),
+    })
+}
+
+//
+// ─── FILESYSTEM CHECKS ──────────────────────────────────────────────────────────
+//
+
 async fn check_directories(config: &AppConfig) -> Result<(), HealthError> {
     for (server_name, server) in &config.servers {
         for (route_path, route_config) in &server.routes {
-            // Check each action type that uses directories
             for action in [
                 &route_config.get,
                 &route_config.post,
@@ -170,17 +201,28 @@ async fn check_directories(config: &AppConfig) -> Result<(), HealthError> {
             .filter_map(|a| a.as_ref())
             {
                 if let Action::Static { directory, .. } = action {
-                    check_directory_accessible(directory)
-                        .await
-                        .map_err(|e| match e.kind() {
-                            std::io::ErrorKind::NotFound => HealthError::DirectoryNotFound {
+                    let meta = tokio::fs::metadata(directory).await.map_err(|e| {
+                        if e.kind() == std::io::ErrorKind::NotFound {
+                            HealthError::DirectoryNotFound {
                                 path: directory.display().to_string(),
-                            },
-                            _ => HealthError::DirectoryNotAccessible {
+                            }
+                        } else {
+                            HealthError::DirectoryNotAccessible {
                                 path: directory.display().to_string(),
                                 source: e,
-                            },
-                        })?;
+                            }
+                        }
+                    })?;
+
+                    if !meta.is_dir() {
+                        return Err(HealthError::DirectoryNotAccessible {
+                            path: directory.display().to_string(),
+                            source: std::io::Error::new(
+                                std::io::ErrorKind::InvalidInput,
+                                "not a directory",
+                            ),
+                        });
+                    }
 
                     info!(
                         server = %server_name,
@@ -196,16 +238,20 @@ async fn check_directories(config: &AppConfig) -> Result<(), HealthError> {
     Ok(())
 }
 
-/// Check for port conflicts in configuration
+//
+// ─── PORT CHECKS ────────────────────────────────────────────────────────────────
+//
+
 fn check_port_conflicts(config: &AppConfig) -> Result<(), HealthError> {
-    let mut port_map: HashMap<(String, u16), Vec<String>> = HashMap::new();
+    let mut map: HashMap<(String, u16), Vec<String>> = HashMap::new();
 
     for (name, server) in &config.servers {
-        let key = (server.host.clone(), server.port);
-        port_map.entry(key).or_default().push(name.clone());
+        map.entry((server.host.clone(), server.port))
+            .or_default()
+            .push(name.clone());
     }
 
-    for ((host, port), servers) in port_map {
+    for ((host, port), servers) in map {
         if servers.len() > 1 {
             return Err(HealthError::PortConflict {
                 host,
@@ -219,11 +265,10 @@ fn check_port_conflicts(config: &AppConfig) -> Result<(), HealthError> {
     Ok(())
 }
 
-/// Check that all configured ports are available for binding
 async fn check_ports_available(config: &AppConfig) -> Result<(), HealthError> {
     for (name, server) in &config.servers {
-        // Try to bind to the port
         let addr = format!("{}:{}", server.host, server.port);
+
         let listener =
             TcpListener::bind(&addr)
                 .await
@@ -233,7 +278,6 @@ async fn check_ports_available(config: &AppConfig) -> Result<(), HealthError> {
                     source: e,
                 })?;
 
-        // Immediately drop the listener to free the port
         drop(listener);
 
         info!(
@@ -244,28 +288,5 @@ async fn check_ports_available(config: &AppConfig) -> Result<(), HealthError> {
         );
     }
 
-    Ok(())
-}
-
-/// Helper: Check if a file exists and is readable
-async fn check_file_readable<F>(path: &Path, error_fn: F) -> Result<(), HealthError>
-where
-    F: FnOnce(String, std::io::Error) -> HealthError,
-{
-    tokio::fs::metadata(path)
-        .await
-        .map_err(|e| error_fn(path.display().to_string(), e))?;
-    Ok(())
-}
-
-/// Helper: Check if a directory exists and is accessible
-async fn check_directory_accessible(path: &Path) -> Result<(), std::io::Error> {
-    let metadata = tokio::fs::metadata(path).await?;
-    if !metadata.is_dir() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotADirectory,
-            "path is not a directory",
-        ));
-    }
     Ok(())
 }

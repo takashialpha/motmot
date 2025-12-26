@@ -74,7 +74,7 @@ pub async fn load_or_generate(
 
 /// Load TLS configuration from certificate and key files
 async fn load_from_files(
-    server_name: &str,
+    _server_name: &str,
     cert_path: &Path,
     key_path: &Path,
 ) -> Result<rustls::ServerConfig, TlsError> {
@@ -174,8 +174,13 @@ fn build_server_config(
     certs: Vec<CertificateDer<'static>>,
     key: PrivateKeyDer<'static>,
 ) -> Result<rustls::ServerConfig, TlsError> {
-    rustls::ServerConfig::builder()
+    let mut config = rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .map_err(|e| TlsError::ConfigCreation(e.to_string()))
+        .map_err(|e| TlsError::ConfigCreation(e.to_string()))?;
+
+    // HTTP/3 ALPNs – mandatory for QUIC
+    config.alpn_protocols = vec![b"h3".to_vec()];
+
+    Ok(config)
 }

@@ -3,7 +3,7 @@ use std::{net::SocketAddr, sync::Arc};
 use app_base::SignalHandler;
 use quinn::{Endpoint, EndpointConfig};
 use socket2::{Domain, Protocol, Socket, Type};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info};
 
 use crate::{config::AppConfig, server, webtransport};
 
@@ -43,6 +43,11 @@ pub async fn run(
     )
     .await?;
 
+    debug!(
+        alpn = ?tls_config.alpn_protocols,
+        "tls_alpn_configured"
+    );
+
     // Create QUIC endpoint
     let endpoint = create_endpoint(&listen_addr, tls_config).await?;
 
@@ -79,10 +84,10 @@ pub async fn run(
 /// Resolve hostname to IPv6 address
 async fn resolve_ipv6_addr(host: &str, port: u16) -> Result<SocketAddr, ConnectionError> {
     // Fast path: direct IPv6 address
-    if host.contains(':') {
-        if let Ok(ipv6) = host.parse::<std::net::Ipv6Addr>() {
-            return Ok(SocketAddr::from((ipv6, port)));
-        }
+    if host.contains(':')
+        && let Ok(ipv6) = host.parse::<std::net::Ipv6Addr>()
+    {
+        return Ok(SocketAddr::from((ipv6, port)));
     }
 
     // DNS resolution path
