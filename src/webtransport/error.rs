@@ -2,7 +2,7 @@ use h3::error::{ConnectionError, StreamError};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum ServerError {
+pub enum WebTransportError {
     #[error("H3 connection error: {0}")]
     H3Connection(#[from] ConnectionError),
 
@@ -15,6 +15,9 @@ pub enum ServerError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("WebTransport session error: {0}")]
+    Session(String),
+
     #[error("invalid HTTP request: {0}")]
     InvalidRequest(String),
 
@@ -24,6 +27,9 @@ pub enum ServerError {
     #[error("method not allowed: {0}")]
     MethodNotAllowed(String),
 
-    #[error("action execution error: {0}")]
-    ActionExecution(String),
+    #[error("datagram error: {0}")]
+    Datagram(String),
+
+    #[error("stream error: {0}")]
+    Stream(String),
 }

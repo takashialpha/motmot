@@ -1,11 +1,17 @@
-use app_base::app::{AppConfigLocation, run};
 use app_base::cli::{CliArgs, InitArgs, RuntimeArgs};
+use app_base::{AppConfigLocation, run};
 use clap::{Parser, Subcommand};
 
+mod action;
 mod app;
 mod config;
+mod connection;
+mod health;
 mod logging;
+mod proxy;
 mod server;
+mod tools;
+mod webtransport;
 
 const APP_NAME: &str = "motmot";
 const TOML_CONFIG_DIR: &str = "/etc/motmot";
@@ -40,7 +46,7 @@ fn main() {
     let cfg = AppConfigLocation::new(APP_NAME).with_dir(TOML_CONFIG_DIR);
 
     if let Err(e) = run(app::MotMot, cfg, cli_args) {
-        eprint!("{}", e);
+        eprintln!("{}", e);
         std::process::exit(1);
     }
 }

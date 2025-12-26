@@ -1,65 +1,123 @@
-pub mod error;
-pub mod fs;
-pub mod h3;
-pub mod quic;
-pub mod request;
-pub mod tls;
-
-pub use crate::config::AppConfig;
-use crate::server::error::ServerError;
-
 use std::sync::Arc;
-use tokio::sync::Notify;
-use tracing::Instrument;
 
-pub async fn run_server(cfg: Arc<AppConfig>) -> Result<(), ServerError> {
-    let shutdown = Arc::new(Notify::new());
+use app_base::SignalHandler;
+use quinn::Endpoint;
+use tracing::{error, info};
 
-    // Spawn signal handler
-    let shutdown_clone = shutdown.clone();
-    tokio::spawn(async move {
-        handle_signals(shutdown_clone).await;
-    });
+use crate::config::AppConfig;
 
-    let mut handles = Vec::new();
+pub mod error;
+pub mod request;
 
-    for name in cfg.servers.keys() {
-        let cfg_clone = cfg.clone();
-        let server_name = name.clone();
-        let server_name_clone = server_name.clone();
-        let shutdown_clone = shutdown.clone();
+pub use error::ServerError;
 
-        let span = tracing::info_span!("server", server = %server_name);
+pub async fn handle_connections(
+    endpoint: Endpoint,
+    config: Arc<AppConfig>,
+    server_name: String,
+    signals: SignalHandler,
+) -> Result<(), ServerError> {
+    info!(server = %server_name, "server_accept_loop_start");
 
-        let handle = tokio::spawn(
-            async move { quic::run(cfg_clone, server_name_clone, shutdown_clone).await }
-                .instrument(span),
-        );
+    let server_name = Arc::new(server_name);
 
-        handles.push((server_name, handle));
-    }
+    loop {
+        tokio::select! {
+            incoming = endpoint.accept() => {
+                if let Some(incoming) = incoming {
+                    let config = config.clone();
+                    let server_name = server_name.clone();
 
-    for (name, handle) in handles {
-        match handle.await {
-            Ok(Ok(())) => tracing::info!(server = %name, "Server exited"),
-            Ok(Err(e)) => tracing::error!(server = %name, error = %e, "Server exited with error"),
-            Err(e) => tracing::error!(server = %name, error = %e, "Server task panicked"),
+                    tokio::spawn(async move {
+                        match incoming.await {
+                            Ok(conn) => {
+                                let remote = conn.remote_address();
+                                info!(
+                                    server = %server_name,
+                                    remote = %remote,
+                                    "connection_established"
+                                );
+
+                                let server_name_err = server_name.clone();
+                                if let Err(e) = handle_connection(conn, config, server_name).await {
+                                    error!(
+                                        server = %server_name_err,
+                                        remote = %remote,
+                                        error = %e,
+                                        "connection_error"
+                                    );
+                                }
+                            }
+                            Err(e) => {
+                                error!(
+                                    server = %server_name,
+                                    error = %e,
+                                    "connection_accept_failed"
+                                );
+                            }
+                        }
+                    });
+                }
+            }
+            _ = signals.wait_shutdown() => {
+                info!(server = %server_name, "server_shutdown_received");
+                break;
+            }
         }
     }
+
+    info!(server = %server_name, "server_accept_loop_end");
+    endpoint.wait_idle().await;
 
     Ok(())
 }
 
-async fn handle_signals(shutdown: Arc<Notify>) {
-    use tokio::signal::unix::{SignalKind, signal};
+async fn handle_connection(
+    conn: quinn::Connection,
+    config: Arc<AppConfig>,
+    server_name: Arc<String>,
+) -> Result<(), ServerError> {
+    let mut h3_conn = h3::server::Connection::new(h3_quinn::Connection::new(conn))
+        .await
+        .map_err(ServerError::H3Connection)?;
 
-    let mut sigint = signal(SignalKind::interrupt()).unwrap();
-    let mut sigterm = signal(SignalKind::terminate()).unwrap();
+    loop {
+        match h3_conn.accept().await {
+            Ok(Some(resolver)) => {
+                let (req, stream) = match resolver.resolve_request().await {
+                    Ok(resolved) => resolved,
+                    Err(e) => {
+                        error!(server = %server_name, error = %e, "request_resolve_failed");
+                        continue;
+                    }
+                };
 
-    tokio::select! {
-        _ = sigint.recv() => tracing::info!("SIGINT received, shutting down..."),
-        _ = sigterm.recv() => tracing::info!("SIGTERM received, shutting down..."),
+                let config = config.clone();
+                let server_name = server_name.clone();
+
+                tokio::spawn(async move {
+                    let server_name_err = server_name.clone();
+                    if let Err(e) = request::handle_request(req, stream, config, server_name).await
+                    {
+                        error!(
+                            server = %server_name_err,
+                            error = %e,
+                            "request_handling_error"
+                        );
+                    }
+                });
+            }
+            Ok(None) => break,
+            Err(e) => {
+                error!(
+                    server = %server_name,
+                    error = %e,
+                    "connection_accept_request_error"
+                );
+                break;
+            }
+        }
     }
 
-    shutdown.notify_waiters();
+    Ok(())
 }
