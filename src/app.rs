@@ -8,7 +8,9 @@ use app_base::{
 use tokio::{runtime::Runtime, task};
 use tracing::{error, info};
 
-use crate::{config::AppConfig, connection, health, logging};
+use crate::features::health;
+use crate::net::run_server;
+use crate::{config::AppConfig, logging};
 
 pub struct MotMot;
 
@@ -78,13 +80,10 @@ impl App for MotMot {
 
                     let span = tracing::info_span!("server", server = %server_name);
 
-                    let handle =
-                        tokio::spawn(
-                            async move {
-                                connection::run(config_clone, server_name_clone, signals).await
-                            }
+                    let handle = tokio::spawn(
+                        async move { run_server(config_clone, server_name_clone, signals).await }
                             .instrument(span),
-                        );
+                    );
 
                     handles.push((server_name.clone(), handle));
                 }

@@ -21,7 +21,6 @@ pub enum Action {
         status: u16,
     },
 
-    #[cfg(feature = "scripting")]
     Script {
         script: PathBuf,
         interpreter: String,

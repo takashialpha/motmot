@@ -1,3 +1,5 @@
+mod error;
+
 use crate::config::AppConfig;
 use bytes::Bytes;
 use h3::server::RequestStream;

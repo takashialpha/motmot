@@ -2,18 +2,13 @@ use app_base::cli::{CliArgs, InitArgs, RuntimeArgs};
 use app_base::{AppConfigLocation, run};
 use clap::{Parser, Subcommand};
 
-mod action;
 mod app;
-mod caching;
 mod config;
-mod connection;
-mod h3;
-mod health;
+mod features;
+mod helpers;
+mod http;
 mod logging;
-mod proxy;
-mod request;
-mod tools;
-mod webtransport;
+mod net;
 
 const APP_NAME: &str = "motmot";
 const TOML_CONFIG_DIR: &str = "/etc/motmot";

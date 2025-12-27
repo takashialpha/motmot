@@ -3,7 +3,7 @@ pub mod ports;
 pub mod tls;
 
 use crate::config::AppConfig;
-use crate::health::error::HealthCheckError;
+use crate::features::health::error::HealthCheckError;
 
 pub async fn run_checks(config: &AppConfig) -> Result<(), HealthCheckError> {
     if config.health.enabled {

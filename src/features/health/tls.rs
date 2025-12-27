@@ -5,7 +5,7 @@ use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
 use tracing::{info, warn};
 
-use crate::health::error::HealthTlsCheckError;
+use crate::features::health::error::HealthTlsCheckError;
 
 pub fn check_tls(config: &AppConfig) -> Result<(), HealthTlsCheckError> {
     for (name, server) in &config.servers {

@@ -1,3 +1,5 @@
+mod error;
+
 use crate::config::Logging;
 use std::fmt::Write as _;
 use std::io;

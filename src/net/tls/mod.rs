@@ -1,9 +1,11 @@
+pub mod error;
+
 use std::path::{Path, PathBuf};
 
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
 use tracing::{info, warn};
 
-use super::error::TlsError;
+use error::TlsError;
 
 // check where rustls_pemfile is used, replace it with another crate.
 

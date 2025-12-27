@@ -4,7 +4,8 @@ use std::sync::Arc;
 use tracing::{error, info};
 
 use super::error::ConnectionError;
-use crate::{config::AppConfig, h3};
+use crate::config::AppConfig;
+use crate::net::h3;
 
 // unified accept loop for http3 (also calls wt handler)
 pub async fn run_accept_loop(

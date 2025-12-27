@@ -3,7 +3,7 @@ use tokio::net::TcpListener;
 use tracing::info;
 
 use crate::config::AppConfig;
-use crate::health::error::HealthPortCheckError;
+use crate::features::health::error::HealthPortCheckError;
 
 pub fn check_port_conflicts(config: &AppConfig) -> Result<(), HealthPortCheckError> {
     let mut map: HashMap<(String, u16), Vec<String>> = HashMap::new();

@@ -10,9 +10,10 @@ use quinn::Connection;
 use tracing::{error, info};
 
 use crate::config::AppConfig;
-use crate::h3::error::ServerError;
+use crate::http::request;
+use crate::net::h3::error::ServerError;
 
-// forward to webtransport if CONNECT, handle http3 default connections.
+// forward to webtransport if CONNECT, handle conn accept loop and forward to request if not wt.
 pub async fn handle_connection(
     conn: Connection,
     config: Arc<AppConfig>,
@@ -69,7 +70,7 @@ pub async fn handle_connection(
                         "webtransport_session_established"
                     );
 
-                    if let Err(e) = crate::webtransport::handle_session(
+                    if let Err(e) = crate::net::webtransport::handle_session(
                         wt_session,
                         config.clone(),
                         server_name.clone(),
@@ -85,7 +86,7 @@ pub async fn handle_connection(
                 let config_clone = config.clone();
                 let server_name_clone = server_name.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = crate::request::handle_request(
+                    if let Err(e) = request::handle_request(
                         req,
                         stream,
                         config_clone,

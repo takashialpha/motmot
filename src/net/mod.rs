@@ -7,13 +7,14 @@ use tracing::{debug, error, info};
 
 use crate::config::AppConfig;
 
-pub mod accept_loop;
-pub mod error;
+pub mod h3;
+pub mod quic;
 pub mod tls;
+pub mod webtransport;
 
-pub use error::ConnectionError;
+use crate::net::quic::{ConnectionError, accept_loop};
 
-pub async fn run(
+pub async fn run_server(
     config: Arc<AppConfig>,
     server_name: String,
     signals: SignalHandler,
