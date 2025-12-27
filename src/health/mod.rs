@@ -1,20 +1,11 @@
+pub mod error;
 pub mod ports;
 pub mod tls;
 
 use crate::config::AppConfig;
-use thiserror::Error;
+use crate::health::error::HealthCheckError;
 
-#[derive(Debug, Error)]
-pub enum HealthError {
-    #[error(transparent)]
-    TlsError(#[from] tls::TlsError),
-
-    #[error(transparent)]
-    PortError(#[from] ports::PortError),
-}
-
-/// Entry point for health checks
-pub async fn run_checks(config: &AppConfig) -> Result<(), HealthError> {
+pub async fn run_checks(config: &AppConfig) -> Result<(), HealthCheckError> {
     if config.health.enabled {
         tls::check_tls(config)?;
         ports::check_port_conflicts(config)?;

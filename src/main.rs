@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 
 mod action;
 mod app;
+mod caching;
 mod config;
 mod connection;
 mod h3;

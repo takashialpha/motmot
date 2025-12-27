@@ -13,8 +13,6 @@ pub mod tls;
 
 pub use error::ConnectionError;
 
-/// Main entry point for all server types (HTTP/3 and WebTransport)
-/// Sets up QUIC endpoint and dispatches to appropriate handler
 pub async fn run(
     config: Arc<AppConfig>,
     server_name: String,
@@ -60,7 +58,7 @@ pub async fn run(
     result
 }
 
-/// Resolve hostname to IPv6 address
+/// resolve host to IPv6 address
 async fn resolve_ipv6_addr(host: &str, port: u16) -> Result<SocketAddr, ConnectionError> {
     if host.contains(':')
         && let Ok(ipv6) = host.parse::<std::net::Ipv6Addr>()
@@ -82,7 +80,6 @@ async fn resolve_ipv6_addr(host: &str, port: u16) -> Result<SocketAddr, Connecti
         })
 }
 
-/// Create QUIC endpoint with given TLS configuration
 async fn create_endpoint(
     listen_addr: &SocketAddr,
     tls_config: rustls::ServerConfig,

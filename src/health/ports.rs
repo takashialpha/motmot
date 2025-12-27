@@ -1,28 +1,11 @@
 use std::collections::HashMap;
-use thiserror::Error;
 use tokio::net::TcpListener;
 use tracing::info;
 
 use crate::config::AppConfig;
+use crate::health::error::HealthPortCheckError;
 
-#[derive(Debug, Error)]
-pub enum PortError {
-    #[error("port conflict: {host}:{port} used by servers: {}", servers.join(", "))]
-    PortConflict {
-        host: String,
-        port: u16,
-        servers: Vec<String>,
-    },
-
-    #[error("port not available: {host}:{port}, reason: {source}")]
-    PortNotAvailable {
-        host: String,
-        port: u16,
-        source: std::io::Error,
-    },
-}
-
-pub fn check_port_conflicts(config: &AppConfig) -> Result<(), PortError> {
+pub fn check_port_conflicts(config: &AppConfig) -> Result<(), HealthPortCheckError> {
     let mut map: HashMap<(String, u16), Vec<String>> = HashMap::new();
 
     for (name, server) in &config.servers {
@@ -33,7 +16,7 @@ pub fn check_port_conflicts(config: &AppConfig) -> Result<(), PortError> {
 
     for ((host, port), servers) in map {
         if servers.len() > 1 {
-            return Err(PortError::PortConflict {
+            return Err(HealthPortCheckError::PortConflict {
                 host,
                 port,
                 servers,
@@ -45,17 +28,18 @@ pub fn check_port_conflicts(config: &AppConfig) -> Result<(), PortError> {
     Ok(())
 }
 
-pub async fn check_ports_available(config: &AppConfig) -> Result<(), PortError> {
+pub async fn check_ports_available(config: &AppConfig) -> Result<(), HealthPortCheckError> {
     for (name, server) in &config.servers {
         let addr = format!("{}:{}", server.host, server.port);
 
-        let listener = TcpListener::bind(&addr)
-            .await
-            .map_err(|e| PortError::PortNotAvailable {
-                host: server.host.clone(),
-                port: server.port,
-                source: e,
-            })?;
+        let listener =
+            TcpListener::bind(&addr)
+                .await
+                .map_err(|e| HealthPortCheckError::PortNotAvailable {
+                    host: server.host.clone(),
+                    port: server.port,
+                    source: e,
+                })?;
 
         drop(listener);
 

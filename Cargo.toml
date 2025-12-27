@@ -9,28 +9,18 @@ license = "Apache-2.0"
 [dependencies]
 anyhow = "1.0.100"
 app-base = { git = "https://github.com/takashialpha/app-base.git" }
-aws-lc-rs = "1.15.2"
 bytes = "1.11.0"
 clap = { version = "4.5.53", features = ["derive"] }
-dirs = "6.0.0"
-futures = "0.3.31"
 h3 = { version = "0.0.8", features = ["tracing"] }
-h3-datagram = "0.0.2"
 h3-quinn = { version = "0.0.10", features = ["tracing", "datagram"] }
 h3-webtransport = "0.1.2"
 http = "1.4.0"
-octets = "0.3.4"
-once_cell = "1.21.3"
 quinn = { version = "0.11.9", features = ["runtime-tokio", "rustls"] }
 rcgen = "0.14.6"
-reqwest = "0.12.28"
 rustls = { version = "0.23.35", features = ["logging", "aws-lc-rs", "std"] }
-rustls-native-certs = "0.8.2"
 rustls-pemfile = "2.2.0"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.147"
 socket2 = { version = "0.6.1", features = ["all"] }
-structopt = "0.3.26"
 thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = ["full"] }
 tracing = "0.1.43"
@@ -42,7 +32,6 @@ tracing-subscriber = { version = "0.3.22", features = [
   "tracing-log",
   "local-time",
 ] }
-tracing-tree = "0.4.1"
 
 [features]
 default = []

@@ -3,28 +3,11 @@ use std::path::Path;
 use crate::config::AppConfig;
 use rustls::ServerConfig;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer};
-use thiserror::Error;
 use tracing::{info, warn};
 
-#[derive(Debug, Error)]
-pub enum TlsError {
-    #[error("certificate file not found: {path}")]
-    CertificateNotFound { path: String },
+use crate::health::error::HealthTlsCheckError;
 
-    #[error("certificate invalid: {path}, reason: {reason}")]
-    CertificateInvalid { path: String, reason: String },
-
-    #[error("private key file not found: {path}")]
-    PrivateKeyNotFound { path: String },
-
-    #[error("private key invalid: {path}, reason: {reason}")]
-    PrivateKeyInvalid { path: String, reason: String },
-
-    #[error("TLS configuration invalid for server '{server}': {reason}")]
-    TlsConfigInvalid { server: String, reason: String },
-}
-
-pub fn check_tls(config: &AppConfig) -> Result<(), TlsError> {
+pub fn check_tls(config: &AppConfig) -> Result<(), HealthTlsCheckError> {
     for (name, server) in &config.servers {
         let tls = match &server.tls {
             Some(t) => t,
@@ -40,7 +23,7 @@ pub fn check_tls(config: &AppConfig) -> Result<(), TlsError> {
         let mut tls_cfg = ServerConfig::builder()
             .with_no_client_auth()
             .with_single_cert(certs, PrivateKeyDer::Pkcs8(key))
-            .map_err(|e| TlsError::TlsConfigInvalid {
+            .map_err(|e| HealthTlsCheckError::TlsConfigInvalid {
                 server: name.clone(),
                 reason: e.to_string(),
             })?;
@@ -58,14 +41,14 @@ pub fn check_tls(config: &AppConfig) -> Result<(), TlsError> {
     Ok(())
 }
 
-fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsError> {
+fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, HealthTlsCheckError> {
     let file = std::fs::File::open(path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
-            TlsError::CertificateNotFound {
+            HealthTlsCheckError::CertificateNotFound {
                 path: path.display().to_string(),
             }
         } else {
-            TlsError::CertificateInvalid {
+            HealthTlsCheckError::CertificateInvalid {
                 path: path.display().to_string(),
                 reason: e.to_string(),
             }
@@ -76,7 +59,7 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsError> {
     let mut certs = Vec::new();
 
     for item in rustls_pemfile::certs(&mut reader) {
-        let cert = item.map_err(|e| TlsError::CertificateInvalid {
+        let cert = item.map_err(|e| HealthTlsCheckError::CertificateInvalid {
             path: path.display().to_string(),
             reason: e.to_string(),
         })?;
@@ -84,7 +67,7 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsError> {
     }
 
     if certs.is_empty() {
-        return Err(TlsError::CertificateInvalid {
+        return Err(HealthTlsCheckError::CertificateInvalid {
             path: path.display().to_string(),
             reason: "no certificates found".into(),
         });
@@ -93,14 +76,14 @@ fn load_certs(path: &Path) -> Result<Vec<CertificateDer<'static>>, TlsError> {
     Ok(certs)
 }
 
-fn load_key(path: &Path) -> Result<PrivatePkcs8KeyDer<'static>, TlsError> {
+fn load_key(path: &Path) -> Result<PrivatePkcs8KeyDer<'static>, HealthTlsCheckError> {
     let file = std::fs::File::open(path).map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
-            TlsError::PrivateKeyNotFound {
+            HealthTlsCheckError::PrivateKeyNotFound {
                 path: path.display().to_string(),
             }
         } else {
-            TlsError::PrivateKeyInvalid {
+            HealthTlsCheckError::PrivateKeyInvalid {
                 path: path.display().to_string(),
                 reason: e.to_string(),
             }
@@ -110,14 +93,14 @@ fn load_key(path: &Path) -> Result<PrivatePkcs8KeyDer<'static>, TlsError> {
     let mut reader = std::io::BufReader::new(file);
 
     if let Some(item) = rustls_pemfile::pkcs8_private_keys(&mut reader).next() {
-        let key = item.map_err(|e| TlsError::PrivateKeyInvalid {
+        let key = item.map_err(|e| HealthTlsCheckError::PrivateKeyInvalid {
             path: path.display().to_string(),
             reason: e.to_string(),
         })?;
         return Ok(key);
     }
 
-    Err(TlsError::PrivateKeyInvalid {
+    Err(HealthTlsCheckError::PrivateKeyInvalid {
         path: path.display().to_string(),
         reason: "no PKCS8 private key found".into(),
     })

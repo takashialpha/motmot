@@ -1,5 +1,5 @@
 - server management while running, also run as a service,
-- add caching
-- write actions, tools, proxy and request modules.
-- review whole error structure
+- write actions, tools, proxy, caching and request modules.
 - add wt CONNECT request behavior as a config.
+- assert future and present logging and error regularity
+- solve known behavioral bugs, replace rustls-pemfile module with sum else.

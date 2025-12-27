@@ -27,12 +27,6 @@ pub enum ConnectionError {
 
     #[error("TLS configuration error: {0}")]
     Tls(#[from] TlsError),
-
-    #[error("server error: {0}")]
-    H3(String),
-
-    #[error("webtransport server error: {0}")]
-    H3Wt(String),
 }
 
 #[derive(Debug, Error)]
@@ -57,9 +51,6 @@ pub enum TlsError {
 
     #[error("failed to write generated private key to '{path}': {source}")]
     PrivateKeyWrite { path: String, source: io::Error },
-
-    #[error("certificate configuration inconsistent: {0}")]
-    InconsistentConfig(String),
 
     #[error("failed to create TLS configuration: {0}")]
     ConfigCreation(String),

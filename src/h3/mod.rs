@@ -1,3 +1,5 @@
+mod error;
+
 use std::sync::Arc;
 
 use h3::ext::Protocol;
@@ -8,19 +10,19 @@ use quinn::Connection;
 use tracing::{error, info};
 
 use crate::config::AppConfig;
+use crate::h3::error::ServerError;
 
-/// Handle a single QUIC connection, optionally serving WebTransport sessions
+// forward to webtransport if CONNECT, handle http3 default connections.
 pub async fn handle_connection(
     conn: Connection,
     config: Arc<AppConfig>,
     server_name: Arc<String>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(), ServerError> {
     let server_config = config
         .servers
         .get(&*server_name)
-        .ok_or_else(|| format!("Server config not found for {}", server_name))?;
+        .ok_or_else(|| ServerError::MissingServerConfig(server_name.to_string()))?;
 
-    // Build the H3 connection safely
     let mut builder = h3::server::builder();
     let builder = builder.enable_extended_connect(true);
     let builder = builder.enable_datagram(true);
@@ -59,7 +61,7 @@ pub async fn handle_connection(
 
                     let wt_session = WebTransportSession::accept(req, stream, h3_conn)
                         .await
-                        .map_err(|e| format!("WT session accept error: {}", e))?;
+                        .map_err(|e| ServerError::WebTransport(e.to_string()))?;
 
                     info!(
                         server = %server_name,
@@ -80,7 +82,6 @@ pub async fn handle_connection(
                     return Ok(());
                 }
 
-                // Normal HTTP/3 request
                 let config_clone = config.clone();
                 let server_name_clone = server_name.clone();
                 tokio::spawn(async move {
@@ -102,7 +103,7 @@ pub async fn handle_connection(
             }
             Err(e) => {
                 error!(server = %server_name, error = %e, "connection_accept_error");
-                break;
+                return Err(e.into());
             }
         }
     }

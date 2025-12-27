@@ -6,7 +6,7 @@ use tracing::{error, info};
 use super::error::ConnectionError;
 use crate::{config::AppConfig, h3};
 
-/// Unified accept loop for HTTP/3 (including optional WebTransport)
+// unified accept loop for http3 (also calls wt handler)
 pub async fn run_accept_loop(
     endpoint: Endpoint,
     config: Arc<AppConfig>,

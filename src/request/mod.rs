@@ -10,5 +10,4 @@ pub async fn handle_request(
     _server_name: Arc<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     todo!();
-    Ok(())
 }

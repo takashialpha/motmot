@@ -10,20 +10,11 @@ pub enum ServerError {
     H3Stream(#[from] StreamError),
 
     #[error("QUIC connection error: {0}")]
-    Connection(#[from] h3_quinn::quinn::ConnectionError),
+    Quic(#[from] quinn::ConnectionError),
 
-    #[error("I/O error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("webtransport error: {0}")]
+    WebTransport(String),
 
-    #[error("invalid HTTP request: {0}")]
-    InvalidRequest(String),
-
-    #[error("route not found: {0}")]
-    RouteNotFound(String),
-
-    #[error("method not allowed: {0}")]
-    MethodNotAllowed(String),
-
-    #[error("action execution error: {0}")]
-    ActionExecution(String),
+    #[error("server configuration missing for {0}")]
+    MissingServerConfig(String),
 }
