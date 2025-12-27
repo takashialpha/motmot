@@ -1,186 +1,208 @@
+mod error;
+
 use std::sync::Arc;
 
-use app_base::SignalHandler;
-use h3::ext::Protocol;
-use h3_webtransport::server::WebTransportSession;
-use http::Method;
-use quinn::Endpoint;
+use bytes::Bytes;
+use h3::quic::BidiStream;
+use h3_webtransport::server::{self, WebTransportSession};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tracing::{error, info};
 
 use crate::config::AppConfig;
+use error::WebTransportError;
 
-pub mod error;
-pub mod session;
-
-pub use error::WebTransportError;
-
-pub async fn handle_connections(
-    endpoint: Endpoint,
-    config: Arc<AppConfig>,
-    server_name: String,
-    signals: SignalHandler,
-) -> Result<(), WebTransportError> {
-    info!(server = %server_name, "webtransport_accept_loop_start");
-
-    let server_name = Arc::new(server_name);
-
-    loop {
-        tokio::select! {
-            incoming = endpoint.accept() => {
-                if let Some(incoming) = incoming {
-                    let config = config.clone();
-                    let server_name = server_name.clone();
-
-                    tokio::spawn(async move {
-                        match incoming.await {
-                            Ok(conn) => {
-                                let remote = conn.remote_address();
-                                info!(
-                                    server = %server_name,
-                                    remote = %remote,
-                                    "connection_established"
-                                );
-
-                                let server_name_err = server_name.clone();
-                                if let Err(e) = handle_connection(conn, config, server_name).await {
-                                    error!(
-                                        server = %server_name_err,
-                                        remote = %remote,
-                                        error = %e,
-                                        "connection_error"
-                                    );
-                                }
-                            }
-                            Err(e) => {
-                                error!(
-                                    server = %server_name,
-                                    error = %e,
-                                    "connection_accept_failed"
-                                );
-                            }
-                        }
-                    });
-                }
-            }
-            _ = signals.wait_shutdown() => {
-                info!(server = %server_name, "webtransport_shutdown_received");
-                break;
-            }
-        }
-    }
-
-    info!(server = %server_name, "webtransport_accept_loop_end");
-    endpoint.wait_idle().await;
-
-    Ok(())
-}
-
-async fn handle_connection(
-    conn: quinn::Connection,
-    config: Arc<AppConfig>,
+pub async fn handle_session(
+    session: WebTransportSession<h3_quinn::Connection, Bytes>,
+    _config: Arc<AppConfig>,
     server_name: Arc<String>,
 ) -> Result<(), WebTransportError> {
-    let mut h3_conn = h3::server::builder()
-        .enable_webtransport(true)
-        .enable_extended_connect(true)
-        .enable_datagram(true)
-        .max_webtransport_sessions(1)
-        .send_grease(true)
-        .build(h3_quinn::Connection::new(conn))
-        .await
-        .map_err(WebTransportError::H3Connection)?;
+    let session_id_dbg = format!("{:?}", session.session_id());
 
     info!(
         server = %server_name,
-        "h3_connection_established_with_webtransport"
+        session_id = %session_id_dbg,
+        "webtransport_session_start"
     );
 
+    let mut datagram_reader = session.datagram_reader();
+    let mut datagram_sender = session.datagram_sender();
+
     loop {
-        match h3_conn.accept().await {
-            Ok(Some(resolver)) => {
-                let (req, stream) = match resolver.resolve_request().await {
-                    Ok(request) => request,
+        tokio::select! {
+            datagram = datagram_reader.read_datagram() => {
+                let datagram = match datagram {
+                    Ok(d) => d,
                     Err(e) => {
                         error!(
                             server = %server_name,
+                            session_id = %session_id_dbg,
                             error = %e,
-                            "request_resolve_failed"
+                            "datagram_read_failed"
+                        );
+                        break;
+                    }
+                };
+
+                info!(
+                    server = %server_name,
+                    session_id = %session_id_dbg,
+                    bytes = datagram.payload().len(),
+                    "datagram_received"
+                );
+
+                if let Err(e) = datagram_sender.send_datagram(datagram.into_payload()) {
+                    error!(
+                        server = %server_name,
+                        session_id = %session_id_dbg,
+                        error = %e,
+                        "datagram_send_failed"
+                    );
+                }
+            }
+
+            uni_stream = session.accept_uni() => {
+                let (stream_id, recv) = match uni_stream {
+                    Ok(Some(s)) => s,
+                    Ok(None) => continue,
+                    Err(e) => {
+                        error!(
+                            server = %server_name,
+                            session_id = %session_id_dbg,
+                            error = %e,
+                            "uni_stream_accept_failed"
+                        );
+                        break;
+                    }
+                };
+
+                let stream_id_dbg = format!("{:?}", stream_id);
+                let stream_id_for_task = stream_id_dbg.clone();
+
+                info!(
+                    server = %server_name,
+                    session_id = %session_id_dbg,
+                    stream_id = %stream_id_dbg,
+                    "uni_stream_accepted"
+                );
+
+                let send = match session.open_uni(stream_id).await {
+                    Ok(s) => s,
+                    Err(e) => {
+                        error!(
+                            server = %server_name,
+                            session_id = %session_id_dbg,
+                            stream_id = %stream_id_dbg,
+                            error = %e,
+                            "uni_stream_open_failed"
                         );
                         continue;
                     }
                 };
 
-                let method = req.method();
-                let path = req.uri().path().to_string();
-                let ext = req.extensions();
-
-                if method == Method::CONNECT
-                    && ext.get::<Protocol>() == Some(&Protocol::WEB_TRANSPORT)
-                {
-                    info!(
-                        server = %server_name,
-                        path = %path,
-                        "webtransport_session_requested"
-                    );
-
-                    let wt_session = WebTransportSession::accept(req, stream, h3_conn)
-                        .await
-                        .map_err(|e| WebTransportError::Session(e.to_string()))?;
-
-                    info!(
-                        server = %server_name,
-                        session_id = ?wt_session.session_id(),
-                        "webtransport_session_established"
-                    );
-
-                    let server_name_err = server_name.clone();
-                    if let Err(e) =
-                        session::handle_session(wt_session, config.clone(), server_name.clone())
-                            .await
-                    {
+                let server_name = server_name.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = echo_stream(send, recv, &server_name, stream_id_for_task).await {
                         error!(
-                            server = %server_name_err,
+                            server = %server_name,
+                            stream_id = %stream_id_dbg,
                             error = %e,
-                            "webtransport_session_error"
+                            "uni_stream_echo_failed"
                         );
                     }
+                });
+            }
 
-                    return Ok(());
-                } else {
-                    info!(
-                        server = %server_name,
-                        method = %method,
-                        path = %path,
-                        "http3_request_received"
-                    );
+            bidi_stream = session.accept_bi() => {
+                match bidi_stream {
+                    Ok(Some(server::AcceptedBi::BidiStream(stream_id, stream))) => {
+                        let stream_id_dbg = format!("{:?}", stream_id);
+                        let stream_id_for_task = stream_id_dbg.clone();
 
-                    let config = config.clone();
-                    let server_name = server_name.clone();
+                        info!(
+                            server = %server_name,
+                            session_id = %session_id_dbg,
+                            stream_id = %stream_id_dbg,
+                            "bidi_stream_accepted"
+                        );
 
-                    tokio::spawn(async move {
-                        if let Err(e) =
-                            crate::server::request::handle_request(req, stream, config, server_name)
-                                .await
-                        {
-                            error!("http3_request_error: {}", e);
-                        }
-                    });
+                        let (send, recv) = BidiStream::split(stream);
+                        let server_name = server_name.clone();
+
+                        tokio::spawn(async move {
+                            if let Err(e) = echo_stream(send, recv, &server_name, stream_id_for_task).await {
+                                error!(
+                                    server = %server_name,
+                                    stream_id = %stream_id_dbg,
+                                    error = %e,
+                                    "bidi_stream_echo_failed"
+                                );
+                            }
+                        });
+                    }
+                    Ok(Some(server::AcceptedBi::Request(_, _))) => {
+                        error!(
+                            server = %server_name,
+                            session_id = %session_id_dbg,
+                            "unexpected_http_request_in_webtransport_session"
+                        );
+                    }
+                    Ok(None) => continue,
+                    Err(e) => {
+                        error!(
+                            server = %server_name,
+                            session_id = %session_id_dbg,
+                            error = %e,
+                            "bidi_stream_accept_failed"
+                        );
+                        break;
+                    }
                 }
             }
-            Ok(None) => {
-                info!(server = %server_name, "connection_closed");
-                break;
-            }
-            Err(e) => {
-                error!(
-                    server = %server_name,
-                    error = %e,
-                    "connection_accept_error"
-                );
-                break;
-            }
+
+            else => break,
         }
     }
+
+    info!(
+        server = %server_name,
+        session_id = %session_id_dbg,
+        "webtransport_session_complete"
+    );
+
+    Ok(())
+}
+
+async fn echo_stream<S, R>(
+    mut send: S,
+    mut recv: R,
+    server_name: &str,
+    stream_id: String,
+) -> Result<(), WebTransportError>
+where
+    S: AsyncWrite + Unpin,
+    R: AsyncRead + Unpin,
+{
+    info!(
+        server = server_name,
+        stream_id = %stream_id,
+        "stream_echo_start"
+    );
+
+    let mut buf = Vec::new();
+    let bytes = recv
+        .read_to_end(&mut buf)
+        .await
+        .map_err(WebTransportError::Io)?;
+
+    send.write_all(&buf).await.map_err(WebTransportError::Io)?;
+    send.shutdown().await.map_err(WebTransportError::Io)?;
+
+    info!(
+        server = server_name,
+        stream_id = %stream_id,
+        bytes = bytes,
+        "stream_echo_complete"
+    );
 
     Ok(())
 }

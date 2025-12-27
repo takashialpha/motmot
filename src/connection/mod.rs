@@ -5,8 +5,9 @@ use quinn::{Endpoint, EndpointConfig};
 use socket2::{Domain, Protocol, Socket, Type};
 use tracing::{debug, error, info};
 
-use crate::{config::AppConfig, server, webtransport};
+use crate::config::AppConfig;
 
+pub mod accept_loop;
 pub mod error;
 pub mod tls;
 
@@ -32,46 +33,24 @@ pub async fn run(
         "connection_setup_start"
     );
 
-    // Resolve IPv6 address
     let listen_addr = resolve_ipv6_addr(&server_config.host, server_config.port).await?;
 
-    // Load or generate TLS configuration
-    let tls_config = tls::load_or_generate(
-        &server_name,
-        server_config.cert_path.as_ref(),
-        server_config.key_path.as_ref(),
-    )
-    .await?;
+    let tls_config = if let Some(tls_conf) = &server_config.tls {
+        tls::load_or_generate(&server_name, Some(&tls_conf.cert), Some(&tls_conf.key)).await?
+    } else {
+        tls::load_or_generate(&server_name, None, None).await?
+    };
 
-    debug!(
-        alpn = ?tls_config.alpn_protocols,
-        "tls_alpn_configured"
-    );
+    debug!(alpn = ?tls_config.alpn_protocols, "tls_alpn_configured");
 
-    // Create QUIC endpoint
     let endpoint = create_endpoint(&listen_addr, tls_config).await?;
 
-    info!(
-        server = %server_name,
-        addr = %listen_addr,
-        "connection_listening"
-    );
+    info!(server = %server_name, addr = %listen_addr, "connection_listening");
 
-    // Dispatch to appropriate handler based on WebTransport flag
-    let result = if server_config.webtransport {
-        webtransport::handle_connections(
-            endpoint,
-            Arc::clone(&config),
-            server_name.clone(),
-            signals,
-        )
-        .await
-        .map_err(|e| ConnectionError::WebTransport(e.to_string()))
-    } else {
-        server::handle_connections(endpoint, Arc::clone(&config), server_name.clone(), signals)
-            .await
-            .map_err(|e| ConnectionError::Server(e.to_string()))
-    };
+    // use unified accept loop
+    let result =
+        accept_loop::run_accept_loop(endpoint, Arc::clone(&config), server_name.clone(), signals)
+            .await;
 
     match &result {
         Ok(_) => info!(server = %server_name, "connection_closed_clean"),
@@ -83,14 +62,12 @@ pub async fn run(
 
 /// Resolve hostname to IPv6 address
 async fn resolve_ipv6_addr(host: &str, port: u16) -> Result<SocketAddr, ConnectionError> {
-    // Fast path: direct IPv6 address
     if host.contains(':')
         && let Ok(ipv6) = host.parse::<std::net::Ipv6Addr>()
     {
         return Ok(SocketAddr::from((ipv6, port)));
     }
 
-    // DNS resolution path
     let mut addrs = tokio::net::lookup_host((host, port)).await.map_err(|e| {
         ConnectionError::AddressResolution {
             host: host.to_string(),
@@ -110,24 +87,18 @@ async fn create_endpoint(
     listen_addr: &SocketAddr,
     tls_config: rustls::ServerConfig,
 ) -> Result<Endpoint, ConnectionError> {
-    // Create IPv6-only UDP socket
     let socket = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))
         .map_err(ConnectionError::SocketCreation)?;
 
-    // Ensure IPv6-only mode (no IPv4 mapping)
     socket
         .set_only_v6(true)
         .map_err(ConnectionError::SocketConfiguration)?;
-
-    // Bind to address
     socket
         .bind(&(*listen_addr).into())
         .map_err(ConnectionError::SocketBind)?;
 
-    // Convert to std socket for quinn
     let std_socket: std::net::UdpSocket = socket.into();
 
-    // Configure QUIC with QuicServerConfig wrapper
     let quic_server_config = quinn::crypto::rustls::QuicServerConfig::try_from(tls_config)
         .map_err(|e| {
             ConnectionError::EndpointCreation(std::io::Error::new(
@@ -139,7 +110,6 @@ async fn create_endpoint(
     let server_config = quinn::ServerConfig::with_crypto(Arc::new(quic_server_config));
     let endpoint_config = EndpointConfig::default();
 
-    // Create endpoint
     Endpoint::new(
         endpoint_config,
         Some(server_config),

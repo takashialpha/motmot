@@ -26,7 +26,7 @@ pub async fn init_logging_async(cfg: &Logging) -> anyhow::Result<()> {
         .with_writer(io::stdout);
 
     // plain
-    let file_layer = cfg.file_path.clone().map(|path| {
+    let file_layer = cfg.file.clone().map(|path| {
         fmt::layer()
             .with_timer(LocalTime::rfc_3339())
             .with_ansi(false)

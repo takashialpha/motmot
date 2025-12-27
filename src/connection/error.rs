@@ -29,10 +29,10 @@ pub enum ConnectionError {
     Tls(#[from] TlsError),
 
     #[error("server error: {0}")]
-    Server(String),
+    H3(String),
 
-    #[error("webtransport error: {0}")]
-    WebTransport(String),
+    #[error("webtransport server error: {0}")]
+    H3Wt(String),
 }
 
 #[derive(Debug, Error)]
