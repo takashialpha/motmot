@@ -8,7 +8,6 @@ use app_base::{
 use tokio::{runtime::Runtime, task};
 use tracing::{error, info};
 
-use crate::features::health;
 use crate::net::run_server;
 use crate::{config::AppConfig, logging};
 
@@ -48,17 +47,27 @@ impl App for MotMot {
 
                 info!("logging_initialized");
 
-                if config.health.enabled {
-                    info!("health_check_starting");
-                    health::run_checks(&config).await.map_err(|e| {
-                        error!("health_check_failed: {e}");
-                        AppError::from(ConfigError::Io(std::io::Error::other(format!(
-                            "health_check_failed: {e}"
-                        ))))
-                    })?;
-                    info!("health_check_passed");
-                } else {
-                    info!("health_check_disabled");
+                #[cfg(feature = "health")]
+                {
+                    if config.health.enabled {
+                        info!("health_check_starting");
+                        crate::features::health::run_checks(&config)
+                            .await
+                            .map_err(|e| {
+                                error!("health_check_failed: {e}");
+                                AppError::from(ConfigError::Io(std::io::Error::other(format!(
+                                    "health_check_failed: {e}"
+                                ))))
+                            })?;
+                        info!("health_check_passed");
+                    } else {
+                        info!("health_check_disabled: config");
+                    }
+                }
+
+                #[cfg(not(feature = "health"))]
+                {
+                    info!("health_check_disabled: not built");
                 }
 
                 let mut handles = Vec::new();

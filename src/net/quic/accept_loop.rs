@@ -1,7 +1,7 @@
 use app_base::SignalHandler;
 use quinn::Endpoint;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{debug, info};
 
 use super::error::ConnectionError;
 use crate::config::AppConfig;
@@ -31,10 +31,10 @@ pub async fn run_accept_loop(
                                 info!(server = %server_name, remote = %remote, "connection_established");
 
                                 if let Err(e) = h3::handle_connection(conn, config.clone(), server_name.clone()).await {
-                                    error!(server = %server_name, remote = %remote, error = %e, "connection_error");
+                                    debug!(server = %server_name, remote = %remote, error = %e,);
                                 }
                             }
-                            Err(e) => error!(server = %server_name, error = %e, "connection_accept_failed"),
+                            Err(e) => debug!(server = %server_name, error = %e,),
                         }
                     });
                 }

@@ -1,6 +1,8 @@
 mod error;
 
 use crate::config::Logging;
+pub use error::LoggingError;
+
 use std::fmt::Write as _;
 use std::io;
 use tracing::{Event, Level, Subscriber};
@@ -15,19 +17,19 @@ use tracing_subscriber::{
     registry::LookupSpan,
 };
 
-pub async fn init_logging_async(cfg: &Logging) -> anyhow::Result<()> {
+pub async fn init_logging_async(cfg: &Logging) -> Result<(), LoggingError> {
     // filter
     let filter = EnvFilter::try_new(&cfg.filter)
-        .map_err(|e| anyhow::anyhow!("invalid log filter '{}': {}", cfg.filter, e))?;
+        .map_err(|e| LoggingError::InvalidFilter(format!("{}: {}", cfg.filter, e)))?;
 
-    // colored
+    // colored stdout
     let stdout_layer = fmt::layer()
         .with_timer(LocalTime::rfc_3339())
         .with_ansi(true)
         .event_format(FlatFormatter)
         .with_writer(io::stdout);
 
-    // plain
+    // optional file layer
     let file_layer = cfg.file.clone().map(|path| {
         fmt::layer()
             .with_timer(LocalTime::rfc_3339())

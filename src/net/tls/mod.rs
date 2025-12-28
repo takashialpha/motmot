@@ -2,7 +2,7 @@ pub mod error;
 
 use std::path::{Path, PathBuf};
 
-use rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
 use tracing::{info, warn};
 
 use error::TlsError;
@@ -70,45 +70,71 @@ pub async fn load_or_generate(
 }
 
 async fn load_from_files(
-    _server_name: &str,
+    server_name: &str,
     cert_path: &Path,
     key_path: &Path,
 ) -> Result<rustls::ServerConfig, TlsError> {
-    let cert_pem = tokio::fs::read(cert_path)
-        .await
-        .map_err(|e| TlsError::CertificateRead {
-            path: cert_path.display().to_string(),
-            source: e,
-        })?;
+    let cert_pem = match tokio::fs::read(cert_path).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            warn!(
+                server = server_name,
+                cert = %cert_path.display(),
+                "certs_not_well_configured: failed to read certificate, not going to listen"
+            );
+            return Err(TlsError::CertificateRead {
+                path: cert_path.display().to_string(),
+                source: e,
+            });
+        }
+    };
 
-    let key_pem = tokio::fs::read(key_path)
-        .await
-        .map_err(|e| TlsError::PrivateKeyRead {
-            path: key_path.display().to_string(),
-            source: e,
-        })?;
+    let key_pem = match tokio::fs::read(key_path).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            warn!(
+                server = server_name,
+                key = %key_path.display(),
+                "certs_not_well_configured: failed to read key, not going to listen"
+            );
+            return Err(TlsError::PrivateKeyRead {
+                path: key_path.display().to_string(),
+                source: e,
+            });
+        }
+    };
 
-    let certs = rustls_pemfile::certs(&mut cert_pem.as_slice())
+    let certs = match CertificateDer::pem_reader_iter(&mut cert_pem.as_slice())
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| TlsError::InvalidCertificate {
-            path: cert_path.display().to_string(),
-        })?;
+    {
+        Ok(certs) if !certs.is_empty() => certs,
+        _ => {
+            warn!(
+                server = server_name,
+                cert = %cert_path.display(),
+                "certs_not_well_configured: invalid or empty certificate, not going to listen"
+            );
+            return Err(TlsError::InvalidCertificate {
+                path: cert_path.display().to_string(),
+            });
+        }
+    };
 
-    if certs.is_empty() {
-        return Err(TlsError::InvalidCertificate {
-            path: cert_path.display().to_string(),
-        });
-    }
+    let key = match PrivateKeyDer::from_pem_reader(&mut key_pem.as_slice()) {
+        Ok(k) => k,
+        Err(_) => {
+            warn!(
+                server = server_name,
+                key = %key_path.display(),
+                "certs_not_well_configured: invalid private key, not going to listen"
+            );
+            return Err(TlsError::InvalidPrivateKey {
+                path: key_path.display().to_string(),
+            });
+        }
+    };
 
-    let key = rustls_pemfile::private_key(&mut key_pem.as_slice())
-        .map_err(|_| TlsError::InvalidPrivateKey {
-            path: key_path.display().to_string(),
-        })?
-        .ok_or_else(|| TlsError::InvalidPrivateKey {
-            path: key_path.display().to_string(),
-        })?;
-
-    build_server_config(certs, key)
+    build_server_config(server_name, certs, key)
 }
 
 async fn generate_and_save(
@@ -155,16 +181,24 @@ async fn generate_and_save(
 }
 
 fn build_server_config(
+    server_name: &str,
     certs: Vec<CertificateDer<'static>>,
     key: PrivateKeyDer<'static>,
 ) -> Result<rustls::ServerConfig, TlsError> {
-    let mut config = rustls::ServerConfig::builder()
+    match rustls::ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
-        .map_err(|e| TlsError::ConfigCreation(e.to_string()))?;
-
-    // HTTP/3 ALPNs
-    config.alpn_protocols = vec![b"h3".to_vec()];
-
-    Ok(config)
+    {
+        Ok(mut config) => {
+            config.alpn_protocols = vec![b"h3".to_vec()];
+            Ok(config)
+        }
+        Err(e) => {
+            warn!(
+                server = server_name,
+                "certs_not_well_configured: failed to create server config, not going to listen, error = %e"
+            );
+            Err(TlsError::ConfigCreation(e.to_string()))
+        }
+    }
 }

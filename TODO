@@ -1,5 +1,5 @@
-- server management while running, also run as a service,
-- write actions, tools, proxy, caching and request modules.
+- run as a service check?
+- write http, helpers, features/proxy and features/caching modules.
 - add wt CONNECT request behavior as a config.
-- assert future and present logging and error regularity
-- solve known behavioral bugs, replace rustls-pemfile module with sum else.
+- maybe add webtransport as a cargo feature?
+- improve logging for connections.

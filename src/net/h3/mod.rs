@@ -7,7 +7,7 @@ use h3_quinn::Connection as H3QuinnConnection;
 use h3_webtransport::server::WebTransportSession;
 use http::Method;
 use quinn::Connection;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 
 use crate::config::AppConfig;
 use crate::http::request;
@@ -36,8 +36,6 @@ pub async fn handle_connection(
     }
 
     let mut h3_conn = h3_builder.build(H3QuinnConnection::new(conn)).await?;
-
-    info!(server = %server_name, "h3_connection_established");
 
     loop {
         match h3_conn.accept().await {
@@ -103,7 +101,7 @@ pub async fn handle_connection(
                 break;
             }
             Err(e) => {
-                error!(server = %server_name, error = %e, "connection_accept_error");
+                debug!(server = %server_name, error = %e);
                 return Err(e.into());
             }
         }
