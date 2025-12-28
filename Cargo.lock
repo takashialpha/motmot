@@ -62,9 +62,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "app-base"
+name = "app_base"
 version = "0.1.0"
-source = "git+https://github.com/takashialpha/app-base.git#d615b1ede167e4229da88c86eabf78acf61f58f3"
+source = "git+https://github.com/takashialpha/app_base.git#d519891aa48c2bd0a8d1c40cbab29c6f7c9464c6"
 dependencies = [
  "clap",
  "dirs",
@@ -735,7 +735,7 @@ dependencies = [
 name = "motmot"
 version = "0.1.0"
 dependencies = [
- "app-base",
+ "app_base",
  "bytes",
  "clap",
  "h3",
