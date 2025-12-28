@@ -64,7 +64,7 @@ dependencies = [
 [[package]]
 name = "app-base"
 version = "0.1.0"
-source = "git+https://github.com/takashialpha/app-base.git#fd7fbd984143f8440643f16ed43a03f5bb561667"
+source = "git+https://github.com/takashialpha/app-base.git#aa64f06aec11f2e29773eac6468104d6d65364f6"
 dependencies = [
  "clap",
  "dirs",

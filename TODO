@@ -1,4 +1,4 @@
-- run as a service check?
+- run as a service? check
 - write http, helpers, features/proxy and features/caching modules.
 - add wt CONNECT request behavior as a config.
 - maybe add webtransport as a cargo feature?
