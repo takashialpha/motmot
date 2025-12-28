@@ -1,5 +1,4 @@
-use app_base::cli::{CliArgs, InitArgs, RuntimeArgs};
-use app_base::{AppConfigLocation, run};
+use app_base::{AppConfigLocation, cli::CliArgs, run};
 use clap::{Parser, Subcommand};
 
 mod app;
@@ -29,7 +28,7 @@ enum Command {
     #[command(about = "Init motmot according to the config file")]
     Init {
         #[command(flatten)]
-        init: InitArgs,
+        init: CliArgs,
     },
 }
 
@@ -37,12 +36,14 @@ fn main() {
     let cli = Cli::parse();
 
     let cli_args = match cli.command {
-        Command::Init { init } => CliArgs::new(init, RuntimeArgs::default()),
+        Command::Init { init } => CliArgs {
+            config: init.config,
+        },
     };
 
     let cfg = AppConfigLocation::new(APP_NAME).with_dir(TOML_CONFIG_DIR);
 
-    if let Err(e) = run(app::MotMot, cfg, cli_args) {
+    if let Err(e) = run(app::MotMot, Some(cfg), cli_args) {
         eprintln!("{}", e);
         std::process::exit(1);
     }
