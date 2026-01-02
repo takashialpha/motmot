@@ -17,7 +17,7 @@ use crate::net::quic::{ConnectionError, accept_loop};
 pub async fn run_server(
     config: Arc<AppConfig>,
     server_name: String,
-    signals: SignalHandler,
+    signals: Arc<SignalHandler>,
 ) -> Result<(), ConnectionError> {
     let server_config = config
         .servers

@@ -10,7 +10,7 @@ use crate::net::run_server;
 
 pub async fn start_servers(
     config: Arc<AppConfig>,
-    signals: SignalHandler,
+    signals: Arc<SignalHandler>,
 ) -> Vec<(String, JoinHandle<Result<(), ConnectionError>>)> {
     let mut handles = Vec::new();
 
@@ -28,7 +28,7 @@ pub async fn start_servers(
         let server_name = name.clone();
         let server_name_for_task = server_name.clone();
         let config_for_task = config.clone();
-        let signals_for_task = signals.clone();
+        let signals_for_task = Arc::clone(&signals);
 
         let span = tracing::info_span!("server", server = %server_name);
 

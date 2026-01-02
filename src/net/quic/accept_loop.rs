@@ -12,7 +12,7 @@ pub async fn run_accept_loop(
     endpoint: Endpoint,
     config: Arc<AppConfig>,
     server_name: String,
-    signals: SignalHandler,
+    signals: Arc<SignalHandler>,
 ) -> Result<(), ConnectionError> {
     let server_name = Arc::new(server_name);
     info!(server = %server_name, "accept_loop_start");
