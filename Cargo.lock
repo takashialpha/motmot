@@ -63,8 +63,8 @@ dependencies = [
 
 [[package]]
 name = "app_base"
-version = "0.1.0"
-source = "git+https://github.com/takashialpha/app_base.git#bd92584a10aa65ad6c4075c8dcc2f839554faa1f"
+version = "1.0.0"
+source = "git+https://github.com/takashialpha/app_base.git#206dbe15c1ac320b5597d2d33a06af1aea1db27d"
 dependencies = [
  "dirs",
  "libc",
