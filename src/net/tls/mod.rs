@@ -7,8 +7,6 @@ use tracing::{info, warn};
 
 use error::TlsError;
 
-// check where rustls_pemfile is used, replace it with another crate.
-
 // gen self signed or load if given correctly.
 pub async fn load_or_generate(
     server_name: &str,

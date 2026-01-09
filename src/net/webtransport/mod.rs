@@ -11,6 +11,7 @@ use tracing::{error, info};
 use crate::config::AppConfig;
 use error::WebTransportError;
 
+// really experimental: should support configuration and stuff
 pub async fn handle_session(
     session: WebTransportSession<h3_quinn::Connection, Bytes>,
     _config: Arc<AppConfig>,

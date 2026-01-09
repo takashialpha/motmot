@@ -7,8 +7,4 @@ pub struct RouteConfig {
     // map http methods to an action
     #[serde(default)]
     pub methods: HashMap<String, Action>,
-
-    // fallback if method not explicitly not set
-    #[serde(default)]
-    pub fallback: Option<Action>,
 }

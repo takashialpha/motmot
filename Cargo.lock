@@ -715,6 +715,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
 
 [[package]]
+name = "mimetype-detector"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b83f5a6e7ff630835b32ab51746126908b2ad30aa8cad2836df2803c418aabb0"
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -742,6 +748,7 @@ dependencies = [
  "h3-quinn",
  "h3-webtransport",
  "http",
+ "mimetype-detector",
  "quinn",
  "rcgen",
  "rustls",

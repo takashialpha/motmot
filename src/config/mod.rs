@@ -3,12 +3,14 @@ pub mod health;
 pub mod logging;
 pub mod route;
 pub mod server;
+pub mod standard;
 
 pub use action::Action;
 pub use health::Health;
 pub use logging::Logging;
 pub use route::RouteConfig;
 pub use server::Server;
+pub use standard::StandardResponses;
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -34,22 +36,12 @@ impl Default for AppConfig {
             "GET".to_string(),
             Action::Static {
                 path: data_dir.join("index.html"),
-                cache: false,
+                cache: false, // change to true when cache get well-implemented.
             },
         );
 
         let mut routes = std::collections::HashMap::new();
-        routes.insert(
-            "/".to_string(),
-            RouteConfig {
-                methods,
-                fallback: Some(Action::Response {
-                    body: "Method not allowed".to_string(),
-                    content_type: "text/plain; charset=utf-8".to_string(),
-                    status: 405,
-                }),
-            },
-        );
+        routes.insert("/".to_string(), RouteConfig { methods });
 
         let mut servers = std::collections::HashMap::new();
         servers.insert(
@@ -60,6 +52,7 @@ impl Default for AppConfig {
                 tls: None,
                 webtransport: false,
                 routes,
+                standard: standard::StandardResponses::default(),
             },
         );
 

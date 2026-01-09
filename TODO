@@ -1,6 +1,6 @@
 - run as a service? check
-- write http, helpers, features/proxy and features/caching modules.
+- write features/proxy and features/caching modules.
 - add wt CONNECT request behavior as a config.
 - maybe add webtransport as a cargo feature? (prob not?)
-- improve logging for connections and connection end.
+- review and improve logging (some parts of error too): connections and connection end; design itself.
 - make docs after first decent release

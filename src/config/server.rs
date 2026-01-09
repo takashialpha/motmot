@@ -1,4 +1,4 @@
-use super::RouteConfig;
+use super::{RouteConfig, StandardResponses};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -15,6 +15,9 @@ pub struct Server {
 
     #[serde(default)]
     pub routes: HashMap<String, RouteConfig>,
+
+    #[serde(default)]
+    pub standard: StandardResponses,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
