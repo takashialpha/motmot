@@ -1,6 +1,15 @@
-- run as a service? check
+ run as a service; adapt for systemd:
+- logging: overhaul and remove timestamps and level trace: delegate to systemd
+- overhaul cli system: easy server status and all stuff
+
 - write features/proxy and features/caching modules.
 - add wt CONNECT request behavior as a config.
 - maybe add webtransport as a cargo feature? (prob not?)
-- review and improve logging (some parts of error too): connections and connection end; design itself.
-- make docs after first decent release
+- review error structure on net
+
+bugs to fix:
+- quic connection not ending gracefully as it should be
+- host field is kinda buggy when using cloudflare rev. proxy
+
+after 1st release:
+- make docs
