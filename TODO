@@ -10,7 +10,6 @@ webtransport could be Option<Behavior> or like that.
 so tls field is always created: proper tls gets more frequent
 
 bugs to fix:
-- quic connection not ending gracefully as it should be
 - host field is kinda buggy when using cloudflare rev. proxy
 - address already in use health check not always works (failure only after sigint!).
 - connections from browsers mostly dont work:

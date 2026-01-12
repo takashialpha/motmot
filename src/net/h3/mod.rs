@@ -56,7 +56,6 @@ pub async fn handle_connection(
                 let ext = req.extensions();
                 let path = req.uri().path().to_string();
 
-                // wt
                 if server_config.webtransport
                     && method == Method::CONNECT
                     && ext.get::<Protocol>() == Some(&Protocol::WEB_TRANSPORT)
@@ -73,18 +72,15 @@ pub async fn handle_connection(
                         "webtransport_session_established"
                     );
 
-                    tokio::spawn(async move {
-                        if let Err(e) = crate::net::webtransport::handle_session(
-                            wt_session,
-                            config.clone(),
-                            server_name.clone(),
-                        )
-                        .await
-                        {
-                            error!(server = %server_name, error = %e, "webtransport_session_error");
-                        }
-                    });
-
+                    if let Err(e) = crate::net::webtransport::handle_session(
+                        wt_session,
+                        config,
+                        server_name.clone(),
+                    )
+                    .await
+                    {
+                        error!(server = %server_name, error = %e, "webtransport_session_error");
+                    }
                     return Ok(());
                 }
 
@@ -105,20 +101,21 @@ pub async fn handle_connection(
                 break;
             }
             Err(e) => {
-                debug!(server = %server_name, error = %e);
-                return Err(e.into());
+                debug!(server = %server_name, error = %e, "connection_error");
+                break;
             }
         }
     }
+
+    if let Err(e) = h3_conn.shutdown(0).await {
+        debug!(server = %server_name, error = %e, "shutdown_error");
+    }
+
     while let Some(res) = join_set.join_next().await {
         if let Err(e) = res {
             debug!(server = %server_name, error = ?e, "request_task_failed");
         }
     }
-    h3_conn
-        .shutdown(usize::MAX)
-        .await
-        .map_err(ServerError::H3Connection)?;
 
     Ok(())
 }
