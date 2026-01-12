@@ -9,6 +9,7 @@ license = "Apache-2.0"
 [dependencies]
 app_base = { git = "https://github.com/takashialpha/app_base.git" }
 bytes = "1.11.0"
+chrono = "0.4.42"
 clap = { version = "4.5.53", features = ["derive"] }
 h3 = { version = "0.0.8", features = ["tracing"] }
 h3-quinn = { version = "0.0.10", features = ["tracing", "datagram"] }
@@ -23,6 +24,7 @@ socket2 = { version = "0.6.1", features = ["all"] }
 thiserror = "2.0.17"
 tokio = { version = "1.48.0", features = ["full"] }
 tracing = "0.1.44"
+tracing-journald = "0.3.2"
 tracing-subscriber = { version = "0.3.22", features = [
   "fmt",
   "ansi",

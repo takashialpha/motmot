@@ -37,7 +37,7 @@ pub async fn handle_request(
         }
     };
 
-    // 3. Execute resolved action
+    // execute resolved action
     if execute_action(action, &mut stream).await.is_err() {
         return execute_action(&server.standard.internal_error, &mut stream).await;
     }
@@ -100,7 +100,7 @@ async fn execute_action(
         },
 
         Action::Proxy { .. } => {
-            // Prepared, not implemented.
+            // not implemented.
             response::send(
                 stream,
                 StatusCode::NOT_IMPLEMENTED,
@@ -112,7 +112,7 @@ async fn execute_action(
         }
 
         Action::Script { .. } => {
-            // Prepared, not implemented.
+            // not implemented.
             response::send(
                 stream,
                 StatusCode::NOT_IMPLEMENTED,

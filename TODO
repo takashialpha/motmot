@@ -3,13 +3,18 @@
 - overhaul cli system: easy server status and all stuff
 
 - write features/proxy and features/caching modules.
-- add wt CONNECT request behavior as a config.
-- maybe add webtransport as a cargo feature? (prob not?)
+- add wt CONNECT behavior as a config:
+webtransport could be Option<Behavior> or like that. 
 - review error structure on net
+- autogen certs should be a value on config, only happens when true:
+so tls field is always created: proper tls gets more frequent
 
 bugs to fix:
 - quic connection not ending gracefully as it should be
 - host field is kinda buggy when using cloudflare rev. proxy
+- address already in use health check not always works (failure only after sigint!).
+- connections from browsers mostly dont work:
+add a feature advertiser: a small external (ipv4, http2) advertises to upgrade to (ipv6, http3)
 
 after 1st release:
 - make docs
