@@ -1,6 +1,6 @@
  run as a service; adapt for systemd:
-- logging: overhaul and remove timestamps and level trace: delegate to systemd
-- overhaul cli system: easy server status and all stuff
+- logging: overhaul. do something closer to nginx
+- overhaul cli system: easy server status and all stuff; again closer to nginx
 
 - write features/proxy and features/caching modules.
 - add wt CONNECT behavior as a config:
@@ -10,10 +10,9 @@ webtransport could be Option<Behavior> or like that.
 so tls field is always created: proper tls gets more frequent
 
 bugs to fix:
-- host field is kinda buggy when using cloudflare rev. proxy
+- host field is kinda buggy when using cloudflare rev. proxy: naming is not appropriate
 - address already in use health check not always works (failure only after sigint!).
-- connections from browsers mostly dont work:
-add a feature advertiser: a small external (ipv4, http2) advertises to upgrade to (ipv6, http3)
+- connections from browsers mostly dont work: maybe they always try first http<3 and fail?
 
 after 1st release:
 - make docs
